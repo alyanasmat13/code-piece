@@ -1,6 +1,8 @@
 export type Team = "red" | "blue";
-export type CardType = "red" | "blue" | "neutral" | "assassin";
+// 'hidden' is used only in client-side filtered views — never in master state
+export type CardType = "red" | "blue" | "neutral" | "assassin" | "hidden";
 export type GamePhase = "clue" | "guess";
+export type Role = "spymaster" | "operative";
 
 export interface Card {
   word: string;
@@ -20,4 +22,15 @@ export interface GameState {
   currentClue: Clue | null;
   guessesLeft: number;
   winner: Team | null;
+  // Included in server broadcasts so operatives can see the score
+  // even though they can't see individual card types
+  redRemaining?: number;
+  blueRemaining?: number;
+}
+
+export interface PlayerInfo {
+  socketId: string;
+  name: string;
+  team: Team | null;
+  role: Role | null;
 }
