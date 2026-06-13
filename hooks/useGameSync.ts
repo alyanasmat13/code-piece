@@ -44,6 +44,7 @@ export function useGameSync(roomCode: string) {
     function onRoomUpdated({ players, gameStarted }: RoomUpdate) {
       setPlayers(players);
       setGameStarted(gameStarted);
+      if (!gameStarted) setGameState(null);
     }
 
     function onGameUpdated(state: GameState) {
@@ -96,6 +97,14 @@ export function useGameSync(roomCode: string) {
     getSocket().emit("end-turn");
   }, []);
 
+  const resetGame = useCallback(() => {
+    getSocket().emit("reset-game");
+  }, []);
+
+  const randomizeTeams = useCallback(() => {
+    getSocket().emit("randomize-teams");
+  }, []);
+
   const myPlayer = players.find((p) => p.socketId === mySocketId) ?? null;
 
   return {
@@ -109,5 +118,7 @@ export function useGameSync(roomCode: string) {
     submitClue,
     guessCard,
     passTurn,
+    resetGame,
+    randomizeTeams,
   };
 }

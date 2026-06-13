@@ -305,6 +305,36 @@ app.prepare().then(() => {
       broadcastGameState(io, currentRoom);
     });
 
+    socket.on("randomize-teams", () => {
+      if (!currentRoom) return;
+      const room = rooms.get(currentRoom);
+      if (!room || room.gameState) return;
+
+      const ids = shuffle(Array.from(room.players.keys()));
+      const mid = Math.ceil(ids.length / 2);
+      const redIds = ids.slice(0, mid);
+      const blueIds = ids.slice(mid);
+
+      redIds.forEach((id, i) => {
+        const p = room.players.get(id);
+        if (p) { p.team = "red"; p.role = i === 0 ? "spymaster" : "operative"; }
+      });
+      blueIds.forEach((id, i) => {
+        const p = room.players.get(id);
+        if (p) { p.team = "blue"; p.role = i === 0 ? "spymaster" : "operative"; }
+      });
+
+      broadcastRoomState(io, currentRoom);
+    });
+
+    socket.on("reset-game", () => {
+      if (!currentRoom) return;
+      const room = rooms.get(currentRoom);
+      if (!room) return;
+      room.gameState = null;
+      broadcastRoomState(io, currentRoom);
+    });
+
     socket.on("end-turn", () => {
       if (!currentRoom) return;
       const room = rooms.get(currentRoom);
