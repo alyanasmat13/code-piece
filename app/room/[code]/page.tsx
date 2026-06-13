@@ -26,16 +26,14 @@ function TeamPanel({
   const myTeamRole = myPlayer?.team === team ? myPlayer.role : null;
 
   const headerBg = isRed ? "bg-red-900" : "bg-blue-900";
-  const headerBorder = isRed ? "border-red-800" : "border-blue-800";
-  const panelBorder = isRed ? "border-red-800/50" : "border-blue-800/50";
   const activeBtn = isRed
-    ? "bg-red-900 border-red-700 text-red-100"
-    : "bg-blue-900 border-blue-700 text-blue-100";
+    ? "bg-red-900 border-slate-700 text-red-100"
+    : "bg-blue-900 border-slate-700 text-blue-100";
 
   return (
-    <div className={`rounded-2xl border ${panelBorder} overflow-hidden flex flex-col`}>
+    <div className="rounded-2xl border border-slate-800 overflow-hidden flex flex-col">
       {/* Header */}
-      <div className={`${headerBg} border-b ${headerBorder} px-5 py-4`}>
+      <div className={`${headerBg} border-b border-slate-800 px-5 py-4`}>
         <h3 className="font-black text-xl text-white">{isRed ? "Red Team" : "Blue Team"}</h3>
         <p className="text-slate-300 text-xs mt-0.5">
           {players.length} {players.length === 1 ? "player" : "players"}
@@ -53,10 +51,10 @@ function TeamPanel({
                 <span className="h-2 w-2 rounded-full bg-green-400 shrink-0" />
                 <span className="text-slate-100 font-medium text-sm truncate">{p.name}</span>
                 <span
-                  className={`ml-auto shrink-0 text-xs font-bold px-2.5 py-0.5 rounded-full border ${
+                  className={`ml-auto shrink-0 text-xs font-bold px-2.5 py-0.5 rounded-full ${
                     p.role === "spymaster"
-                      ? "bg-amber-900/60 border-amber-700 text-amber-300"
-                      : "bg-slate-700 border-slate-600 text-slate-300"
+                      ? "bg-amber-900/60 text-amber-300"
+                      : "bg-slate-700 text-slate-300"
                   }`}
                 >
                   {p.role === "spymaster" ? "Spymaster" : "Operative"}
@@ -177,7 +175,7 @@ export default function RoomPage() {
 
           {/* Error */}
           {startError && (
-            <div className="bg-red-950 border border-red-800 text-red-300 text-sm rounded-xl px-4 py-2.5">
+            <div className="bg-red-950 border border-slate-700 text-red-300 text-sm rounded-xl px-4 py-2.5">
               {startError}
             </div>
           )}

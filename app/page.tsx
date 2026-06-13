@@ -5,10 +5,6 @@ import { useRouter } from "next/navigation";
 import { getSocket } from "@/lib/socket";
 import { useSocket } from "@/components/providers/socket-provider";
 
-function generateRoomCode(): string {
-  return Math.random().toString(36).slice(2, 6).toUpperCase();
-}
-
 export default function Home() {
   const router = useRouter();
   const { setPlayerName } = useSocket();
@@ -26,15 +22,15 @@ export default function Home() {
     if (!name.trim()) { setError("Enter your player name first."); return; }
     setError("");
     setLoading("create");
-    const code = generateRoomCode();
+    // Room codes are generated server-side so they can't be forged or squatted
     getSocket().emit(
       "create-room",
-      { playerName: name.trim(), roomCode: code },
-      (res: { success?: boolean; error?: string }) => {
+      { playerName: name.trim() },
+      (res: { success?: boolean; error?: string; roomCode?: string }) => {
         setLoading(null);
-        if (res.error) { setError(res.error); return; }
+        if (res.error || !res.roomCode) { setError(res.error ?? "Could not create room."); return; }
         setPlayerName(name.trim());
-        router.push(`/room/${code}`);
+        router.push(`/room/${res.roomCode}`);
       }
     );
   }
@@ -107,8 +103,9 @@ export default function Home() {
                   type="text"
                   placeholder="e.g. Luffy"
                   value={name}
+                  maxLength={24}
                   onChange={(e) => setName(e.target.value)}
-                  className="w-full rounded-xl border border-slate-600 bg-slate-800 px-4 py-3 text-white placeholder-slate-500 outline-none focus:border-amber-500 transition-colors text-sm"
+                  className="w-full rounded-xl border border-slate-600 bg-slate-800 px-4 py-3 text-white placeholder-slate-500 outline-none focus:border-slate-400 transition-colors text-sm"
                 />
               </div>
               <div>
@@ -122,13 +119,13 @@ export default function Home() {
                   onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
                   onKeyDown={(e) => e.key === "Enter" && handleJoin()}
                   maxLength={6}
-                  className="w-full rounded-xl border border-slate-600 bg-slate-800 px-4 py-3 text-white placeholder-slate-500 outline-none focus:border-amber-500 transition-colors uppercase tracking-[0.2em] text-sm font-mono"
+                  className="w-full rounded-xl border border-slate-600 bg-slate-800 px-4 py-3 text-white placeholder-slate-500 outline-none focus:border-slate-400 transition-colors uppercase tracking-[0.2em] text-sm font-mono"
                 />
               </div>
             </div>
 
             {error && (
-              <div className="bg-red-950 border border-red-800 text-red-300 text-sm rounded-xl px-4 py-2.5">
+              <div className="bg-red-950 border border-slate-700 text-red-300 text-sm rounded-xl px-4 py-2.5">
                 {error}
               </div>
             )}

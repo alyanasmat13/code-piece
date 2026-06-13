@@ -1,6 +1,7 @@
 // @ts-check
 const { createServer } = require("http");
 const { parse } = require("url");
+const crypto = require("crypto");
 const next = require("next");
 const { Server } = require("socket.io");
 const words = require("./data/words.json");
@@ -8,9 +9,63 @@ const words = require("./data/words.json");
 const dev = process.env.NODE_ENV !== "production";
 const hostname = "localhost";
 const port = parseInt(process.env.PORT || "3000", 10);
+// Set in production to lock socket connections to your site's origin,
+// e.g. ALLOWED_ORIGIN=https://codepiece.example.com
+const allowedOrigin = process.env.ALLOWED_ORIGIN || null;
 
 const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
+
+// ---------------------------------------------------------------------------
+// Limits & validation — all socket payloads are untrusted
+// ---------------------------------------------------------------------------
+
+const MAX_ROOMS = 200;
+const MAX_PLAYERS_PER_ROOM = 12;
+const MAX_NAME_LENGTH = 24;
+const MAX_CLUE_LENGTH = 40;
+const BOARD_SIZE = 25;
+const ROOM_CODE_RE = /^[A-Z0-9]{4,8}$/;
+const VALID_TEAMS = ["red", "blue"];
+const VALID_ROLES = ["spymaster", "operative"];
+
+// Per-socket event rate limit (generous for normal play)
+const RATE_LIMIT_MAX_EVENTS = 30;
+const RATE_LIMIT_WINDOW_MS = 10_000;
+
+/** Strip control characters, trim, and truncate. Returns null if unusable. */
+function sanitizeName(raw) {
+  if (typeof raw !== "string") return null;
+  const name = raw.replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, MAX_NAME_LENGTH);
+  return name || null;
+}
+
+function sanitizeClueWord(raw) {
+  if (typeof raw !== "string") return null;
+  const word = raw.replace(/[\u0000-\u001f\u007f]/g, "").trim();
+  if (!word || word.length > MAX_CLUE_LENGTH) return null;
+  return word;
+}
+
+function isValidRoomCode(code) {
+  return typeof code === "string" && ROOM_CODE_RE.test(code);
+}
+
+// No 0/O or 1/I/L to keep codes easy to share verbally
+const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+
+function generateRoomCode() {
+  let code = "";
+  for (let i = 0; i < 5; i++) {
+    code += CODE_ALPHABET[crypto.randomInt(CODE_ALPHABET.length)];
+  }
+  return code;
+}
+
+/** Acks are client-controlled; only call them if they're real functions. */
+function toAck(callback) {
+  return typeof callback === "function" ? callback : () => {};
+}
 
 // ---------------------------------------------------------------------------
 // Inline game logic (mirrors lib/game/logic.ts — server runs plain JS)
@@ -19,7 +74,7 @@ const handle = app.getRequestHandler();
 function shuffle(arr) {
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = crypto.randomInt(i + 1);
     [a[i], a[j]] = [a[j], a[i]];
   }
   return a;
@@ -44,7 +99,7 @@ function toNextTurn(state) {
 }
 
 function initializeGame(wordList) {
-  const startingTeam = Math.random() < 0.5 ? "red" : "blue";
+  const startingTeam = crypto.randomInt(2) === 0 ? "red" : "blue";
   const types = shuffle([
     ...Array(9).fill(startingTeam),
     ...Array(8).fill(opponent(startingTeam)),
@@ -52,7 +107,7 @@ function initializeGame(wordList) {
     "assassin",
   ]);
   const board = shuffle(wordList)
-    .slice(0, 25)
+    .slice(0, BOARD_SIZE)
     .map((word, i) => ({ word, type: types[i], revealed: false }));
   return {
     board,
@@ -162,43 +217,125 @@ app.prepare().then(() => {
     handle(req, res, parsedUrl);
   });
 
-  const io = new Server(httpServer);
+  const io = new Server(httpServer, {
+    // Game payloads are tiny; the 1 MB default invites memory abuse
+    maxHttpBufferSize: 10_000,
+    ...(allowedOrigin ? { cors: { origin: allowedOrigin } } : {}),
+    // WebSocket upgrades bypass CORS, so enforce the origin here too
+    allowRequest: (req, cb) => {
+      if (allowedOrigin && req.headers.origin && req.headers.origin !== allowedOrigin) {
+        cb("origin not allowed", false);
+        return;
+      }
+      cb(null, true);
+    },
+  });
 
   io.on("connection", (socket) => {
     /** @type {string | null} */
     let currentRoom = null;
 
+    // Sliding-window rate limit for this socket
+    let eventCount = 0;
+    let windowStart = Date.now();
+
+    /**
+     * Wrap a handler so malformed payloads can never crash the process,
+     * and spammy sockets get throttled (or dropped if they keep going).
+     */
+    function on(event, handler) {
+      socket.on(event, (...args) => {
+        const now = Date.now();
+        if (now - windowStart > RATE_LIMIT_WINDOW_MS) {
+          windowStart = now;
+          eventCount = 0;
+        }
+        eventCount++;
+        if (eventCount > RATE_LIMIT_MAX_EVENTS) {
+          if (eventCount > RATE_LIMIT_MAX_EVENTS * 5) socket.disconnect(true);
+          return;
+        }
+        try {
+          handler(...args);
+        } catch (err) {
+          console.error(`Error handling "${event}" from ${socket.id}:`, err);
+        }
+      });
+    }
+
+    function removeFromCurrentRoom() {
+      if (!currentRoom) return;
+      const room = rooms.get(currentRoom);
+      if (room) {
+        room.players.delete(socket.id);
+        if (room.players.size === 0) {
+          rooms.delete(currentRoom);
+        } else {
+          broadcastRoomState(io, currentRoom);
+        }
+      }
+      socket.leave(currentRoom);
+      currentRoom = null;
+    }
+
     // ---- Room events -------------------------------------------------------
 
-    socket.on("create-room", ({ playerName, roomCode }, callback) => {
-      if (rooms.has(roomCode)) {
-        callback({ error: "Room already exists." });
+    on("create-room", (payload, callback) => {
+      const ack = toAck(callback);
+      const playerName = sanitizeName(payload && payload.playerName);
+      if (!playerName) {
+        ack({ error: "Invalid player name." });
         return;
       }
+      if (rooms.size >= MAX_ROOMS) {
+        ack({ error: "Server is full. Try again later." });
+        return;
+      }
+      removeFromCurrentRoom();
+
+      // Codes are generated server-side so clients can't squat or forge them
+      let roomCode;
+      do {
+        roomCode = generateRoomCode();
+      } while (rooms.has(roomCode));
+
       const players = new Map();
       players.set(socket.id, { name: playerName, team: null, role: null });
       rooms.set(roomCode, { players, gameState: null });
       currentRoom = roomCode;
       socket.join(roomCode);
-      callback({ success: true });
+      ack({ success: true, roomCode });
       broadcastRoomState(io, roomCode);
     });
 
-    socket.on("join-room", ({ playerName, roomCode }, callback) => {
+    on("join-room", (payload, callback) => {
+      const ack = toAck(callback);
+      const playerName = sanitizeName(payload && payload.playerName);
+      const roomCode = payload && payload.roomCode;
+      if (!playerName || !isValidRoomCode(roomCode)) {
+        ack({ error: "Invalid name or room code." });
+        return;
+      }
       const room = rooms.get(roomCode);
       if (!room) {
-        callback({ error: "Room not found." });
+        ack({ error: "Room not found." });
         return;
       }
       const existing = room.players.get(socket.id);
+      if (!existing && room.players.size >= MAX_PLAYERS_PER_ROOM) {
+        ack({ error: "Room is full." });
+        return;
+      }
+      if (currentRoom && currentRoom !== roomCode) removeFromCurrentRoom();
+
       room.players.set(socket.id, {
         name: playerName,
-        team: existing?.team ?? null,
-        role: existing?.role ?? null,
+        team: existing ? existing.team : null,
+        role: existing ? existing.role : null,
       });
       currentRoom = roomCode;
       socket.join(roomCode);
-      callback({ success: true });
+      ack({ success: true });
       broadcastRoomState(io, roomCode);
 
       // If a game is already running, send the current filtered state
@@ -207,27 +344,23 @@ app.prepare().then(() => {
         const gs = room.gameState;
         const redRemaining = gs.board.filter((c) => c.type === "red" && !c.revealed).length;
         const blueRemaining = gs.board.filter((c) => c.type === "blue" && !c.revealed).length;
-        const filtered = filterStateForPlayer(gs, info?.role ?? null);
+        const filtered = filterStateForPlayer(gs, info ? info.role : null);
         socket.emit("game-updated", { ...filtered, redRemaining, blueRemaining });
       }
     });
 
-    socket.on("leave-room", ({ roomCode }) => {
-      const room = rooms.get(roomCode);
-      if (!room) return;
-      room.players.delete(socket.id);
-      socket.leave(roomCode);
-      currentRoom = null;
-      if (room.players.size === 0) {
-        rooms.delete(roomCode);
-      } else {
-        broadcastRoomState(io, roomCode);
-      }
+    on("leave-room", (payload) => {
+      const roomCode = payload && payload.roomCode;
+      if (!isValidRoomCode(roomCode) || roomCode !== currentRoom) return;
+      removeFromCurrentRoom();
     });
 
     // ---- Team / role selection ---------------------------------------------
 
-    socket.on("join-team", ({ team, role }) => {
+    on("join-team", (payload) => {
+      const team = payload && payload.team;
+      const role = payload && payload.role;
+      if (!VALID_TEAMS.includes(team) || !VALID_ROLES.includes(role)) return;
       if (!currentRoom) return;
       const room = rooms.get(currentRoom);
       // Disallow changing team/role once game has started
@@ -241,10 +374,15 @@ app.prepare().then(() => {
 
     // ---- Game lifecycle ----------------------------------------------------
 
-    socket.on("start-game", (callback) => {
+    on("start-game", (callback) => {
+      const ack = toAck(callback);
       if (!currentRoom) return;
       const room = rooms.get(currentRoom);
       if (!room) return;
+      if (room.gameState) {
+        ack({ error: "Game already in progress." });
+        return;
+      }
 
       const playerList = Array.from(room.players.values());
       const hasRedSpy = playerList.some((p) => p.team === "red" && p.role === "spymaster");
@@ -253,21 +391,23 @@ app.prepare().then(() => {
       const hasBluePlayer = playerList.some((p) => p.team === "blue");
 
       if (!hasRedSpy || !hasBlueSpy || !hasRedPlayer || !hasBluePlayer) {
-        if (typeof callback === "function") {
-          callback({ error: "Each team needs at least one Spymaster and one player." });
-        }
+        ack({ error: "Each team needs at least one Spymaster and one player." });
         return;
       }
 
       room.gameState = initializeGame(words);
       broadcastRoomState(io, currentRoom);
       broadcastGameState(io, currentRoom);
-      if (typeof callback === "function") callback({ success: true });
+      ack({ success: true });
     });
 
     // ---- Game action events ------------------------------------------------
 
-    socket.on("submit-clue", ({ word, count }) => {
+    on("submit-clue", (payload) => {
+      const word = sanitizeClueWord(payload && payload.word);
+      const count = payload && payload.count;
+      // Strict integer check — NaN slips through Math.min/Math.max clamps
+      if (!word || !Number.isInteger(count) || count < 0 || count > 9) return;
       if (!currentRoom) return;
       const room = rooms.get(currentRoom);
       if (!room || !room.gameState) return;
@@ -282,11 +422,13 @@ app.prepare().then(() => {
         player.role !== "spymaster"
       ) return;
 
-      room.gameState = applySubmitClue(gs, word.trim(), Math.max(0, Math.min(9, count)));
+      room.gameState = applySubmitClue(gs, word, count);
       broadcastGameState(io, currentRoom);
     });
 
-    socket.on("guess-card", ({ cardIndex }) => {
+    on("guess-card", (payload) => {
+      const cardIndex = payload && payload.cardIndex;
+      if (!Number.isInteger(cardIndex) || cardIndex < 0 || cardIndex >= BOARD_SIZE) return;
       if (!currentRoom) return;
       const room = rooms.get(currentRoom);
       if (!room || !room.gameState) return;
@@ -305,10 +447,11 @@ app.prepare().then(() => {
       broadcastGameState(io, currentRoom);
     });
 
-    socket.on("randomize-teams", () => {
+    on("randomize-teams", () => {
       if (!currentRoom) return;
       const room = rooms.get(currentRoom);
       if (!room || room.gameState) return;
+      if (!room.players.has(socket.id)) return;
 
       const ids = shuffle(Array.from(room.players.keys()));
       const mid = Math.ceil(ids.length / 2);
@@ -327,15 +470,15 @@ app.prepare().then(() => {
       broadcastRoomState(io, currentRoom);
     });
 
-    socket.on("reset-game", () => {
+    on("reset-game", () => {
       if (!currentRoom) return;
       const room = rooms.get(currentRoom);
-      if (!room) return;
+      if (!room || !room.players.has(socket.id)) return;
       room.gameState = null;
       broadcastRoomState(io, currentRoom);
     });
 
-    socket.on("end-turn", () => {
+    on("end-turn", () => {
       if (!currentRoom) return;
       const room = rooms.get(currentRoom);
       if (!room || !room.gameState) return;
@@ -352,15 +495,7 @@ app.prepare().then(() => {
     // ---- Disconnect --------------------------------------------------------
 
     socket.on("disconnect", () => {
-      if (!currentRoom) return;
-      const room = rooms.get(currentRoom);
-      if (!room) return;
-      room.players.delete(socket.id);
-      if (room.players.size === 0) {
-        rooms.delete(currentRoom);
-      } else {
-        broadcastRoomState(io, currentRoom);
-      }
+      removeFromCurrentRoom();
     });
   });
 

@@ -20,7 +20,8 @@ export function useGameSync(roomCode: string) {
   const nameRef = useRef("");
 
   useEffect(() => {
-    const name = localStorage.getItem("playerName") || "";
+    // Server rejects names over 24 chars; clamp in case localStorage was edited
+    const name = (localStorage.getItem("playerName") || "").trim().slice(0, 24);
     if (!name) {
       router.replace("/");
       return;

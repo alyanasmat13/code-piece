@@ -21,7 +21,7 @@ const TYPE_STYLES: Record<string, { base: string; revealed: string }> = {
     revealed: "bg-stone-900 text-stone-500 opacity-55",
   },
   assassin: {
-    base: "bg-neutral-900 text-slate-300 ring-1 ring-neutral-700",
+    base: "bg-neutral-900 text-slate-300",
     revealed: "bg-black text-neutral-600 opacity-70",
   },
   hidden: {
@@ -38,8 +38,8 @@ function cardClasses(card: Card, clickable: boolean): string {
     : "cursor-default";
   return [
     "flex items-center justify-center rounded-xl p-2",
-    "text-center text-sm font-bold uppercase tracking-wide",
-    "transition-all select-none h-16",
+    "text-center text-sm sm:text-base font-bold uppercase tracking-wide",
+    "transition-all select-none h-24 sm:h-28 lg:h-32",
     color,
     interact,
   ].join(" ");
@@ -103,14 +103,14 @@ export function GameView({
     const active = !winner && currentTurn === team;
     if (team === "red") {
       return (
-        <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-colors ${active ? "bg-red-900 border-red-700" : "bg-slate-800 border-slate-700"}`}>
+        <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors ${active ? "bg-red-900" : "bg-slate-800"}`}>
           <span className={`text-xs font-semibold uppercase tracking-widest ${active ? "text-red-300" : "text-slate-500"}`}>Red</span>
           <span className={`text-xl font-black tabular-nums ${active ? "text-red-200" : "text-slate-500"}`}>{count}</span>
         </div>
       );
     }
     return (
-      <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-colors ${active ? "bg-blue-900 border-blue-700" : "bg-slate-800 border-slate-700"}`}>
+      <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors ${active ? "bg-blue-900" : "bg-slate-800"}`}>
         <span className={`text-xs font-semibold uppercase tracking-widest ${active ? "text-blue-300" : "text-slate-500"}`}>Blue</span>
         <span className={`text-xl font-black tabular-nums ${active ? "text-blue-200" : "text-slate-500"}`}>{count}</span>
       </div>
@@ -118,9 +118,6 @@ export function GameView({
   }
 
   const turnIsRed = currentTurn === "red";
-  const footerAccent = turnIsRed
-    ? "border-red-900/60 bg-red-950/40"
-    : "border-blue-900/60 bg-blue-950/40";
   const turnText = turnIsRed ? "text-red-300" : "text-blue-300";
   const turnLabel = turnIsRed ? "Red Team" : "Blue Team";
 
@@ -167,8 +164,8 @@ export function GameView({
 
       {/* ── Turn / phase indicator bar ── */}
       {!winner && (
-        <div className={`shrink-0 px-5 py-2.5 flex items-center gap-2.5 border-b ${
-          turnIsRed ? "bg-red-950/50 border-red-900/40" : "bg-blue-950/50 border-blue-900/40"
+        <div className={`shrink-0 px-5 py-2.5 flex items-center gap-2.5 border-b border-slate-800 ${
+          turnIsRed ? "bg-red-950/50" : "bg-blue-950/50"
         }`}>
           <span className={`font-black text-base ${turnText}`}>{turnLabel}</span>
           <span className="text-slate-600 text-sm">·</span>
@@ -181,10 +178,8 @@ export function GameView({
       {/* ── Win banner ── */}
       {winner && (
         <div
-          className={`mx-4 mt-4 rounded-2xl border p-5 text-center shrink-0 ${
-            winner === "red"
-              ? "bg-red-950 border-red-800"
-              : "bg-blue-950 border-blue-800"
+          className={`mx-4 mt-4 rounded-2xl p-5 text-center shrink-0 ${
+            winner === "red" ? "bg-red-950" : "bg-blue-950"
           }`}
         >
           <p className={`text-3xl font-black ${winner === "red" ? "text-red-300" : "text-blue-300"}`}>
@@ -201,8 +196,8 @@ export function GameView({
 
       {/* ── Board ── */}
       <main className="flex-1 flex items-center justify-center px-4 py-4">
-        <div className="w-full max-w-2xl">
-          <div className="grid grid-cols-5 gap-2">
+        <div className="w-full max-w-5xl">
+          <div className="grid grid-cols-5 gap-2 sm:gap-3">
             {board.map((card, i) => {
               const clickable = canGuess && !card.revealed;
               return (
@@ -222,7 +217,7 @@ export function GameView({
 
       {/* ── Bottom clue bar ── */}
       {!winner && (
-        <footer className={`shrink-0 border-t ${footerAccent}`}>
+        <footer className={`shrink-0 border-t border-slate-800 ${turnIsRed ? "bg-red-950/30" : "bg-blue-950/30"}`}>
           <div className="px-6 py-5">
             {/* Spymaster clue input */}
             {canGiveClue && (
@@ -232,7 +227,7 @@ export function GameView({
                   placeholder="Your clue word…"
                   value={clueWord}
                   onChange={(e) => setClueWord(e.target.value)}
-                  className="flex-1 rounded-xl border border-slate-600 bg-slate-800 px-5 py-4 text-white placeholder-slate-500 outline-none focus:border-amber-500 transition-colors text-lg"
+                  className="flex-1 rounded-xl border border-slate-600 bg-slate-800 px-5 py-4 text-white placeholder-slate-500 outline-none focus:border-slate-400 transition-colors text-lg"
                   autoFocus
                 />
                 <div className="flex items-center gap-2 bg-slate-800 border border-slate-600 rounded-xl px-4 py-4">
