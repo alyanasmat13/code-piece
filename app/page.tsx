@@ -108,20 +108,19 @@ export default function Home() {
                   placeholder="e.g. Luffy"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleCreate()}
                   className="w-full rounded-xl border border-slate-600 bg-slate-800 px-4 py-3 text-white placeholder-slate-500 outline-none focus:border-amber-500 transition-colors text-sm"
                 />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
-                  Room Code <span className="text-slate-600 normal-case font-normal">(leave blank to create)</span>
+                  Room Code
                 </label>
                 <input
                   type="text"
                   placeholder="ABCD"
                   value={roomCode}
                   onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
-                  onKeyDown={(e) => e.key === "Enter" && roomCode ? handleJoin() : handleCreate()}
+                  onKeyDown={(e) => e.key === "Enter" && handleJoin()}
                   maxLength={6}
                   className="w-full rounded-xl border border-slate-600 bg-slate-800 px-4 py-3 text-white placeholder-slate-500 outline-none focus:border-amber-500 transition-colors uppercase tracking-[0.2em] text-sm font-mono"
                 />

@@ -125,7 +125,7 @@ export function GameView({
   const turnLabel = turnIsRed ? "Red Team" : "Blue Team";
 
   return (
-    <div className="flex flex-col bg-slate-950 text-white" style={{ minHeight: "100%" }}>
+    <div className="flex flex-col flex-1 bg-slate-950 text-white">
 
       {/* ── Top bar ── */}
       <header className="bg-slate-900 border-b border-slate-700 px-4 py-3 shrink-0">
@@ -164,6 +164,19 @@ export function GameView({
           </div>
         </div>
       </header>
+
+      {/* ── Turn / phase indicator bar ── */}
+      {!winner && (
+        <div className={`shrink-0 px-5 py-2.5 flex items-center gap-2.5 border-b ${
+          turnIsRed ? "bg-red-950/50 border-red-900/40" : "bg-blue-950/50 border-blue-900/40"
+        }`}>
+          <span className={`font-black text-base ${turnText}`}>{turnLabel}</span>
+          <span className="text-slate-600 text-sm">·</span>
+          <span className="text-slate-400 text-sm font-medium">
+            {phase === "clue" ? "Spymaster Phase" : "Guessing Phase"}
+          </span>
+        </div>
+      )}
 
       {/* ── Win banner ── */}
       {winner && (
@@ -210,37 +223,26 @@ export function GameView({
       {/* ── Bottom clue bar ── */}
       {!winner && (
         <footer className={`shrink-0 border-t ${footerAccent}`}>
-          {/* Turn label strip */}
-          <div className="px-5 py-2 border-b border-slate-800/60 flex items-center gap-2">
-            <span className={`text-sm font-bold ${turnText}`}>{turnLabel}</span>
-            <span className="text-slate-600">·</span>
-            <span className="text-slate-400 text-sm">
-              {phase === "clue" ? "Spymaster Phase" : "Guessing Phase"}
-            </span>
-          </div>
-
-          <div className="px-5 py-3.5">
+          <div className="px-6 py-5">
             {/* Spymaster clue input */}
             {canGiveClue && (
-              <form onSubmit={handleClueSubmit} className="flex gap-2 items-center">
-                <div className="flex-1 relative">
-                  <input
-                    type="text"
-                    placeholder="Your clue word…"
-                    value={clueWord}
-                    onChange={(e) => setClueWord(e.target.value)}
-                    className="w-full rounded-xl border border-slate-600 bg-slate-800 px-4 py-3 text-white placeholder-slate-500 outline-none focus:border-amber-500 transition-colors text-sm"
-                    autoFocus
-                  />
-                </div>
-                <div className="flex items-center gap-1.5 bg-slate-800 border border-slate-600 rounded-xl px-3 py-3">
-                  <button type="button" onClick={() => setClueCount(Math.max(0, clueCount - 1))} className="text-slate-400 hover:text-white w-5 text-center font-bold">−</button>
-                  <span className="text-white font-bold w-5 text-center tabular-nums">{clueCount}</span>
-                  <button type="button" onClick={() => setClueCount(Math.min(9, clueCount + 1))} className="text-slate-400 hover:text-white w-5 text-center font-bold">+</button>
+              <form onSubmit={handleClueSubmit} className="flex gap-3 items-center">
+                <input
+                  type="text"
+                  placeholder="Your clue word…"
+                  value={clueWord}
+                  onChange={(e) => setClueWord(e.target.value)}
+                  className="flex-1 rounded-xl border border-slate-600 bg-slate-800 px-5 py-4 text-white placeholder-slate-500 outline-none focus:border-amber-500 transition-colors text-lg"
+                  autoFocus
+                />
+                <div className="flex items-center gap-2 bg-slate-800 border border-slate-600 rounded-xl px-4 py-4">
+                  <button type="button" onClick={() => setClueCount(Math.max(0, clueCount - 1))} className="text-slate-400 hover:text-white w-6 text-center text-lg font-bold">−</button>
+                  <span className="text-white font-black text-xl w-6 text-center tabular-nums">{clueCount}</span>
+                  <button type="button" onClick={() => setClueCount(Math.min(9, clueCount + 1))} className="text-slate-400 hover:text-white w-6 text-center text-lg font-bold">+</button>
                 </div>
                 <button
                   type="submit"
-                  className="rounded-xl bg-amber-500 px-5 py-3 text-sm font-black text-slate-950 hover:bg-amber-400 transition-colors"
+                  className="rounded-xl bg-amber-500 px-7 py-4 text-base font-black text-slate-950 hover:bg-amber-400 transition-colors"
                 >
                   Give Clue
                 </button>
@@ -249,26 +251,38 @@ export function GameView({
 
             {/* Waiting for spymaster */}
             {!canGiveClue && phase === "clue" && (
-              <p className="text-slate-500 text-sm">
-                Waiting for <span className={`font-semibold ${turnText}`}>{turnLabel}</span> Spymaster to give a clue…
+              <p className="text-slate-400 text-base py-1">
+                Waiting for <span className={`font-bold ${turnText}`}>{turnLabel}</span> Spymaster to give a clue…
               </p>
             )}
 
             {/* Active clue display */}
             {phase === "guess" && currentClue && (
-              <div className="flex items-center justify-between gap-4">
-                <div className="flex items-baseline gap-3 flex-wrap">
-                  <span className="text-slate-400 text-sm">Clue</span>
-                  <span className="text-white text-xl font-black">&ldquo;{currentClue.word}&rdquo;</span>
-                  <span className={`font-bold text-base ${turnText}`}>× {currentClue.count}</span>
-                  <span className="text-slate-500 text-sm">
-                    {guessesLeft} guess{guessesLeft !== 1 ? "es" : ""} remaining
-                  </span>
+              <div className="flex items-center gap-6">
+                <div className="flex items-center gap-5 flex-1 flex-wrap">
+                  <div>
+                    <p className="text-xs text-slate-500 uppercase tracking-widest font-semibold mb-1">Clue</p>
+                    <p className="text-4xl font-black text-white leading-none">
+                      &ldquo;{currentClue.word}&rdquo;
+                    </p>
+                  </div>
+                  <div className="border-l border-slate-700 pl-5">
+                    <p className="text-xs text-slate-500 uppercase tracking-widest font-semibold mb-1">Count</p>
+                    <p className={`text-4xl font-black leading-none ${turnText}`}>
+                      {currentClue.count}
+                    </p>
+                  </div>
+                  <div className="border-l border-slate-700 pl-5">
+                    <p className="text-xs text-slate-500 uppercase tracking-widest font-semibold mb-1">Guesses Left</p>
+                    <p className="text-4xl font-black text-slate-200 leading-none">
+                      {guessesLeft}
+                    </p>
+                  </div>
                 </div>
                 {canEndTurn && (
                   <button
                     onClick={onPassTurn}
-                    className="shrink-0 rounded-xl border border-slate-600 bg-slate-800 px-4 py-2 text-sm font-semibold text-slate-300 hover:bg-slate-700 transition-colors"
+                    className="shrink-0 rounded-xl border border-slate-600 bg-slate-800 px-5 py-3 text-sm font-semibold text-slate-300 hover:bg-slate-700 transition-colors"
                   >
                     End Turn
                   </button>
