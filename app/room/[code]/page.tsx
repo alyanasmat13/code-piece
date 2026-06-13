@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { getSocket } from "@/lib/socket";
 import { useGameSync } from "@/hooks/useGameSync";
+import { CATEGORIES, MIN_BOARD_WORDS, getWordPool } from "@/lib/game/categories";
 import { GameView } from "./game";
 import type { PlayerInfo, Role, Team } from "@/lib/game/types";
 
@@ -46,9 +47,16 @@ function TeamPanel({
           <p className="text-slate-600 text-sm italic">No players yet — be the first!</p>
         ) : (
           <ul className="space-y-2.5">
-            {players.map((p) => (
-              <li key={p.socketId} className="flex items-center gap-3">
-                <span className="h-2 w-2 rounded-full bg-green-400 shrink-0" />
+            {players.map((p, i) => (
+              <li
+                key={p.socketId}
+                className="flex items-center gap-3 animate-fade-up"
+                style={{ animationDelay: `${i * 40}ms` }}
+              >
+                <span className="relative flex h-2 w-2 shrink-0">
+                  <span className="absolute inline-flex h-full w-full rounded-full bg-green-400 animate-pulse-soft" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-green-400" />
+                </span>
                 <span className="text-slate-100 font-medium text-sm truncate">{p.name}</span>
                 <span
                   className={`ml-auto shrink-0 text-xs font-bold px-2.5 py-0.5 rounded-full ${
@@ -69,7 +77,7 @@ function TeamPanel({
       <div className="bg-slate-800 border-t border-slate-700 p-3 flex gap-2">
         <button
           onClick={() => onJoin("spymaster")}
-          className={`flex-1 rounded-xl py-2.5 text-sm font-semibold border transition-colors ${
+          className={`flex-1 rounded-xl py-2.5 text-sm font-semibold border active:scale-[0.97] transition-[background-color,color,transform] duration-150 ease-out ${
             myTeamRole === "spymaster" ? activeBtn : "border-slate-600 text-slate-400 hover:bg-slate-700 hover:text-slate-200"
           }`}
         >
@@ -77,13 +85,65 @@ function TeamPanel({
         </button>
         <button
           onClick={() => onJoin("operative")}
-          className={`flex-1 rounded-xl py-2.5 text-sm font-semibold border transition-colors ${
+          className={`flex-1 rounded-xl py-2.5 text-sm font-semibold border active:scale-[0.97] transition-[background-color,color,transform] duration-150 ease-out ${
             myTeamRole === "operative" ? activeBtn : "border-slate-600 text-slate-400 hover:bg-slate-700 hover:text-slate-200"
           }`}
         >
           Operative
         </button>
       </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// CategoryPicker
+// ---------------------------------------------------------------------------
+
+function CategoryPicker({
+  selected,
+  onToggle,
+}: {
+  selected: string[];
+  onToggle: (id: string) => void;
+}) {
+  const totalWords = getWordPool(selected).length;
+  const enoughWords = totalWords >= MIN_BOARD_WORDS;
+
+  return (
+    <div className="animate-fade-up">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="font-black text-lg text-white">Word Categories</h3>
+        <p className={`text-xs font-semibold transition-colors ${enoughWords ? "text-slate-500" : "text-amber-400"}`}>
+          {totalWords} words selected
+        </p>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {CATEGORIES.map((cat) => {
+          const isSelected = selected.includes(cat.id);
+          return (
+            <button
+              key={cat.id}
+              onClick={() => onToggle(cat.id)}
+              className={`rounded-xl border px-4 py-2.5 text-sm font-semibold active:scale-[0.97] transition-[background-color,color,border-color,transform] duration-150 ease-out ${
+                isSelected
+                  ? "bg-amber-500/15 border-amber-500/40 text-amber-300"
+                  : "border-slate-700 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+              }`}
+            >
+              {cat.label}
+              <span className={isSelected ? "ml-2 text-xs text-amber-400/70" : "ml-2 text-xs text-slate-600"}>
+                {cat.words.length}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      {!enoughWords && (
+        <p className="mt-3 text-xs text-amber-400 animate-fade-up">
+          Select at least {MIN_BOARD_WORDS} words total to start a game.
+        </p>
+      )}
     </div>
   );
 }
@@ -96,22 +156,39 @@ export default function RoomPage() {
   const { code } = useParams<{ code: string }>();
   const router = useRouter();
   const [startError, setStartError] = useState("");
+  const [categoryError, setCategoryError] = useState("");
 
   const {
-    players, gameStarted, gameState, myPlayer,
+    players, gameStarted, gameState, myPlayer, selectedCategories,
     joinTeam, startGame, submitClue, guessCard,
-    passTurn, resetGame, randomizeTeams,
+    passTurn, resetGame, randomizeTeams, setCategories,
   } = useGameSync(code);
 
   const redPlayers = players.filter((p) => p.team === "red");
   const bluePlayers = players.filter((p) => p.team === "blue");
   const unassigned = players.filter((p) => !p.team);
 
-  const canStart =
+  const enoughWords = getWordPool(selectedCategories).length >= MIN_BOARD_WORDS;
+  const hasSpymasters =
     redPlayers.some((p) => p.role === "spymaster") &&
     bluePlayers.some((p) => p.role === "spymaster") &&
     redPlayers.length > 0 &&
     bluePlayers.length > 0;
+  const canStart = hasSpymasters && enoughWords;
+
+  const startLabel = !hasSpymasters
+    ? "Each team needs a Spymaster"
+    : !enoughWords
+    ? "Select more word categories"
+    : "Start Game";
+
+  function handleToggleCategory(id: string) {
+    const next = selectedCategories.includes(id)
+      ? selectedCategories.filter((c) => c !== id)
+      : [...selectedCategories, id];
+    setCategoryError("");
+    setCategories(next, (err) => setCategoryError(err));
+  }
 
   if (gameStarted && gameState) {
     return (
@@ -160,23 +237,23 @@ export default function RoomPage() {
       <div className="flex-1 p-6">
         <div className="max-w-4xl mx-auto flex flex-col gap-5">
           {/* Team panels */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-fade-up">
             <TeamPanel team="red" players={redPlayers} myPlayer={myPlayer} onJoin={(r) => joinTeam("red", r)} />
             <TeamPanel team="blue" players={bluePlayers} myPlayer={myPlayer} onJoin={(r) => joinTeam("blue", r)} />
           </div>
 
           {/* Unassigned players */}
           {unassigned.length > 0 && (
-            <div className="bg-slate-900 border border-slate-700 rounded-xl px-5 py-3.5">
+            <div className="bg-slate-900 border border-slate-700 rounded-xl px-5 py-3.5 animate-fade-up">
               <p className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-1">Not yet on a team</p>
               <p className="text-slate-300 text-sm">{unassigned.map((p) => p.name).join(", ")}</p>
             </div>
           )}
 
-          {/* Error */}
-          {startError && (
-            <div className="bg-red-950 border border-slate-700 text-red-300 text-sm rounded-xl px-4 py-2.5">
-              {startError}
+          {/* Errors */}
+          {(startError || categoryError) && (
+            <div className="bg-red-950 border border-slate-700 text-red-300 text-sm rounded-xl px-4 py-2.5 animate-fade-up">
+              {startError || categoryError}
             </div>
           )}
 
@@ -185,10 +262,10 @@ export default function RoomPage() {
             <button
               disabled={players.length < 2}
               onClick={randomizeTeams}
-              className={`rounded-xl px-5 py-3.5 text-sm font-semibold border transition-colors shrink-0 ${
+              className={`rounded-xl px-5 py-3.5 text-sm font-semibold border active:scale-[0.97] transition-[background-color,transform] duration-150 ease-out shrink-0 ${
                 players.length >= 2
                   ? "border-slate-600 text-slate-300 bg-slate-800 hover:bg-slate-700"
-                  : "border-slate-800 text-slate-700 bg-slate-900 cursor-not-allowed"
+                  : "border-slate-800 text-slate-700 bg-slate-900 cursor-not-allowed active:scale-100"
               }`}
             >
               Randomize Teams
@@ -196,15 +273,18 @@ export default function RoomPage() {
             <button
               disabled={!canStart}
               onClick={() => { setStartError(""); startGame((err) => setStartError(err)); }}
-              className={`flex-1 rounded-xl py-3.5 text-sm font-black tracking-wide transition-colors ${
+              className={`flex-1 rounded-xl py-3.5 text-sm font-black tracking-wide active:scale-[0.98] transition-[background-color,transform] duration-150 ease-out ${
                 canStart
                   ? "bg-amber-500 text-slate-950 hover:bg-amber-400"
-                  : "bg-slate-800 text-slate-600 cursor-not-allowed"
+                  : "bg-slate-800 text-slate-600 cursor-not-allowed active:scale-100"
               }`}
             >
-              {canStart ? "Start Game" : "Each team needs a Spymaster"}
+              {startLabel}
             </button>
           </div>
+
+          {/* Word categories */}
+          <CategoryPicker selected={selectedCategories} onToggle={handleToggleCategory} />
         </div>
       </div>
     </div>

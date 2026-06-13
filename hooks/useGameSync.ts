@@ -3,11 +3,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getSocket } from "@/lib/socket";
+import { DEFAULT_CATEGORY_IDS } from "@/lib/game/categories";
 import type { GameState, PlayerInfo, Role, Team } from "@/lib/game/types";
 
 interface RoomUpdate {
   players: PlayerInfo[];
   gameStarted: boolean;
+  selectedCategories: string[];
 }
 
 export function useGameSync(roomCode: string) {
@@ -15,6 +17,7 @@ export function useGameSync(roomCode: string) {
   const [players, setPlayers] = useState<PlayerInfo[]>([]);
   const [gameStarted, setGameStarted] = useState(false);
   const [gameState, setGameState] = useState<GameState | null>(null);
+  const [selectedCategories, setSelectedCategories] = useState<string[]>(DEFAULT_CATEGORY_IDS);
   const [mySocketId, setMySocketId] = useState<string | null>(null);
   // Stable ref so reconnect handler can read the name without re-running the effect
   const nameRef = useRef("");
@@ -42,9 +45,10 @@ export function useGameSync(roomCode: string) {
       );
     }
 
-    function onRoomUpdated({ players, gameStarted }: RoomUpdate) {
+    function onRoomUpdated({ players, gameStarted, selectedCategories }: RoomUpdate) {
       setPlayers(players);
       setGameStarted(gameStarted);
+      setSelectedCategories(selectedCategories);
       if (!gameStarted) setGameState(null);
     }
 
@@ -106,12 +110,26 @@ export function useGameSync(roomCode: string) {
     getSocket().emit("randomize-teams");
   }, []);
 
+  const setCategories = useCallback(
+    (categoryIds: string[], onError?: (msg: string) => void) => {
+      getSocket().emit(
+        "set-categories",
+        { categoryIds },
+        (res: { error?: string }) => {
+          if (res?.error) onError?.(res.error);
+        }
+      );
+    },
+    []
+  );
+
   const myPlayer = players.find((p) => p.socketId === mySocketId) ?? null;
 
   return {
     players,
     gameStarted,
     gameState,
+    selectedCategories,
     mySocketId,
     myPlayer,
     joinTeam,
@@ -121,5 +139,6 @@ export function useGameSync(roomCode: string) {
     passTurn,
     resetGame,
     randomizeTeams,
+    setCategories,
   };
 }

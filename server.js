@@ -4,7 +4,7 @@ const { parse } = require("url");
 const crypto = require("crypto");
 const next = require("next");
 const { Server } = require("socket.io");
-const words = require("./data/words.json");
+const categories = require("./data/categories.json");
 
 const dev = process.env.NODE_ENV !== "production";
 const hostname = "localhost";
@@ -28,6 +28,14 @@ const BOARD_SIZE = 25;
 const ROOM_CODE_RE = /^[A-Z0-9]{4,8}$/;
 const VALID_TEAMS = ["red", "blue"];
 const VALID_ROLES = ["spymaster", "operative"];
+const CATEGORY_IDS = categories.map((c) => c.id);
+const DEFAULT_CATEGORY_IDS = [...CATEGORY_IDS];
+
+/** Combine the word lists of the given category ids into one pool. */
+function getWordPool(categoryIds) {
+  const ids = new Set(categoryIds);
+  return categories.filter((c) => ids.has(c.id)).flatMap((c) => c.words);
+}
 
 // Per-socket event rate limit (generous for normal play)
 const RATE_LIMIT_MAX_EVENTS = 30;
@@ -177,7 +185,7 @@ function filterStateForPlayer(state, role) {
 // rooms: Map<roomCode, { players: Map<socketId, { name, team, role }>, gameState }>
 // ---------------------------------------------------------------------------
 
-/** @type {Map<string, { players: Map<string, { name: string, team: string|null, role: string|null }>, gameState: object|null }>} */
+/** @type {Map<string, { players: Map<string, { name: string, team: string|null, role: string|null }>, gameState: object|null, selectedCategories: string[] }>} */
 const rooms = new Map();
 
 function broadcastRoomState(io, roomCode) {
@@ -190,6 +198,7 @@ function broadcastRoomState(io, roomCode) {
   io.to(roomCode).emit("room-updated", {
     players,
     gameStarted: room.gameState !== null,
+    selectedCategories: room.selectedCategories,
   });
 }
 
@@ -301,7 +310,7 @@ app.prepare().then(() => {
 
       const players = new Map();
       players.set(socket.id, { name: playerName, team: null, role: null });
-      rooms.set(roomCode, { players, gameState: null });
+      rooms.set(roomCode, { players, gameState: null, selectedCategories: [...DEFAULT_CATEGORY_IDS] });
       currentRoom = roomCode;
       socket.join(roomCode);
       ack({ success: true, roomCode });
@@ -372,6 +381,34 @@ app.prepare().then(() => {
       broadcastRoomState(io, currentRoom);
     });
 
+    // ---- Word category selection -------------------------------------------
+
+    on("set-categories", (payload, callback) => {
+      const ack = toAck(callback);
+      const categoryIds = payload && payload.categoryIds;
+      if (!Array.isArray(categoryIds)) return;
+      if (!currentRoom) return;
+      const room = rooms.get(currentRoom);
+      // Disallow changing categories once the game has started
+      if (!room || room.gameState) return;
+      if (!room.players.has(socket.id)) return;
+
+      const uniqueIds = [...new Set(categoryIds)].filter(
+        (id) => typeof id === "string" && CATEGORY_IDS.includes(id)
+      );
+      if (uniqueIds.length === 0) {
+        ack({ error: "Select at least one category." });
+        return;
+      }
+      if (getWordPool(uniqueIds).length < BOARD_SIZE) {
+        ack({ error: `Selected categories need at least ${BOARD_SIZE} words combined.` });
+        return;
+      }
+
+      room.selectedCategories = uniqueIds;
+      broadcastRoomState(io, currentRoom);
+    });
+
     // ---- Game lifecycle ----------------------------------------------------
 
     on("start-game", (callback) => {
@@ -395,7 +432,13 @@ app.prepare().then(() => {
         return;
       }
 
-      room.gameState = initializeGame(words);
+      const wordPool = getWordPool(room.selectedCategories);
+      if (wordPool.length < BOARD_SIZE) {
+        ack({ error: "Not enough words selected. Enable more categories." });
+        return;
+      }
+
+      room.gameState = initializeGame(wordPool);
       broadcastRoomState(io, currentRoom);
       broadcastGameState(io, currentRoom);
       ack({ success: true });

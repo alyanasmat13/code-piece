@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import words from "@/data/words.json";
+import { DEFAULT_CATEGORY_IDS, getWordPool } from "@/lib/game/categories";
 import {
   initializeGame,
   submitClue,
@@ -67,7 +67,7 @@ export default function SandboxPage() {
   const [clueCount, setClueCount] = useState(1);
 
   useEffect(() => {
-    setState(initializeGame(words));
+    setState(initializeGame(getWordPool(DEFAULT_CATEGORY_IDS)));
   }, []);
 
   if (!state) return null;
@@ -95,7 +95,7 @@ export default function SandboxPage() {
   }
 
   function handleReset() {
-    setState(initializeGame(words));
+    setState(initializeGame(getWordPool(DEFAULT_CATEGORY_IDS)));
     setSpymaster(false);
     setClueWord("");
     setClueCount(1);

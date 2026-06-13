@@ -39,7 +39,7 @@ function cardClasses(card: Card, clickable: boolean): string {
   return [
     "flex items-center justify-center rounded-xl p-2",
     "text-center text-sm sm:text-base font-bold uppercase tracking-wide",
-    "transition-all select-none h-24 sm:h-28 lg:h-32",
+    "transition-[background-color,color,opacity,transform,filter] duration-200 ease-out select-none h-24 sm:h-28 lg:h-32",
     color,
     interact,
   ].join(" ");
@@ -164,10 +164,10 @@ export function GameView({
 
       {/* ── Turn / phase indicator bar ── */}
       {!winner && (
-        <div className={`shrink-0 px-5 py-2.5 flex items-center gap-2.5 border-b border-slate-800 ${
+        <div className={`shrink-0 px-5 py-2.5 flex items-center gap-2.5 border-b border-slate-800 transition-colors duration-300 ease-in-out-strong ${
           turnIsRed ? "bg-red-950/50" : "bg-blue-950/50"
         }`}>
-          <span className={`font-black text-base ${turnText}`}>{turnLabel}</span>
+          <span className={`font-black text-base transition-colors duration-300 ease-in-out-strong ${turnText}`}>{turnLabel}</span>
           <span className="text-slate-600 text-sm">·</span>
           <span className="text-slate-400 text-sm font-medium">
             {phase === "clue" ? "Spymaster Phase" : "Guessing Phase"}
@@ -178,7 +178,7 @@ export function GameView({
       {/* ── Win banner ── */}
       {winner && (
         <div
-          className={`mx-4 mt-4 rounded-2xl p-5 text-center shrink-0 ${
+          className={`mx-4 mt-4 rounded-2xl p-5 text-center shrink-0 animate-scale-in ${
             winner === "red" ? "bg-red-950" : "bg-blue-950"
           }`}
         >
@@ -187,7 +187,7 @@ export function GameView({
           </p>
           <button
             onClick={onReset}
-            className="mt-3 rounded-xl bg-amber-500 px-6 py-2.5 text-sm font-black text-slate-950 hover:bg-amber-400 transition-colors"
+            className="mt-3 rounded-xl bg-amber-500 px-6 py-2.5 text-sm font-black text-slate-950 hover:bg-amber-400 active:scale-[0.97] transition-[background-color,transform] duration-150 ease-out"
           >
             Play Again
           </button>
@@ -221,7 +221,7 @@ export function GameView({
           <div className="px-6 py-5">
             {/* Spymaster clue input */}
             {canGiveClue && (
-              <form onSubmit={handleClueSubmit} className="flex gap-3 items-center">
+              <form onSubmit={handleClueSubmit} className="flex gap-3 items-center animate-fade-up">
                 <input
                   type="text"
                   placeholder="Your clue word…"
@@ -231,13 +231,13 @@ export function GameView({
                   autoFocus
                 />
                 <div className="flex items-center gap-2 bg-slate-800 border border-slate-600 rounded-xl px-4 py-4">
-                  <button type="button" onClick={() => setClueCount(Math.max(0, clueCount - 1))} className="text-slate-400 hover:text-white w-6 text-center text-lg font-bold">−</button>
+                  <button type="button" onClick={() => setClueCount(Math.max(0, clueCount - 1))} className="text-slate-400 hover:text-white active:scale-[0.9] transition-[color,transform] duration-100 ease-out w-6 text-center text-lg font-bold">−</button>
                   <span className="text-white font-black text-xl w-6 text-center tabular-nums">{clueCount}</span>
-                  <button type="button" onClick={() => setClueCount(Math.min(9, clueCount + 1))} className="text-slate-400 hover:text-white w-6 text-center text-lg font-bold">+</button>
+                  <button type="button" onClick={() => setClueCount(Math.min(9, clueCount + 1))} className="text-slate-400 hover:text-white active:scale-[0.9] transition-[color,transform] duration-100 ease-out w-6 text-center text-lg font-bold">+</button>
                 </div>
                 <button
                   type="submit"
-                  className="rounded-xl bg-amber-500 px-7 py-4 text-base font-black text-slate-950 hover:bg-amber-400 transition-colors"
+                  className="rounded-xl bg-amber-500 px-7 py-4 text-base font-black text-slate-950 hover:bg-amber-400 active:scale-[0.97] transition-[background-color,transform] duration-150 ease-out"
                 >
                   Give Clue
                 </button>
@@ -253,7 +253,7 @@ export function GameView({
 
             {/* Active clue display */}
             {phase === "guess" && currentClue && (
-              <div className="flex items-center gap-6">
+              <div key={`${currentClue.word}-${currentClue.count}`} className="flex items-center gap-6 animate-fade-up">
                 <div className="flex items-center gap-5 flex-1 flex-wrap">
                   <div>
                     <p className="text-xs text-slate-500 uppercase tracking-widest font-semibold mb-1">Clue</p>
@@ -277,7 +277,7 @@ export function GameView({
                 {canEndTurn && (
                   <button
                     onClick={onPassTurn}
-                    className="shrink-0 rounded-xl border border-slate-600 bg-slate-800 px-5 py-3 text-sm font-semibold text-slate-300 hover:bg-slate-700 transition-colors"
+                    className="shrink-0 rounded-xl border border-slate-600 bg-slate-800 px-5 py-3 text-sm font-semibold text-slate-300 hover:bg-slate-700 active:scale-[0.97] transition-[background-color,transform] duration-150 ease-out"
                   >
                     End Turn
                   </button>
