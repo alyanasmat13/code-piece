@@ -26,10 +26,16 @@ const MAX_NAME_LENGTH = 24;
 const MAX_CLUE_LENGTH = 40;
 const BOARD_SIZE = 25;
 const ROOM_CODE_RE = /^[A-Z0-9]{4,8}$/;
+// Accept UUID-ish ids — letters, digits, dashes. Bounded to prevent abuse.
+const PLAYER_ID_RE = /^[A-Za-z0-9_-]{8,128}$/;
 const VALID_TEAMS = ["red", "blue"];
 const VALID_ROLES = ["spymaster", "operative"];
 const CATEGORY_IDS = categories.map((c) => c.id);
 const DEFAULT_CATEGORY_IDS = [...CATEGORY_IDS];
+// How long a disconnected player stays in the room before being evicted.
+// Long enough to cover a page refresh, short enough that ghost players
+// don't linger if a tab is closed for good.
+const DISCONNECT_GRACE_MS = 20_000;
 
 /** Combine the word lists of the given category ids into one pool. */
 function getWordPool(categoryIds) {
@@ -57,6 +63,10 @@ function sanitizeClueWord(raw) {
 
 function isValidRoomCode(code) {
   return typeof code === "string" && ROOM_CODE_RE.test(code);
+}
+
+function isValidPlayerId(id) {
+  return typeof id === "string" && PLAYER_ID_RE.test(id);
 }
 
 // No 0/O or 1/I/L to keep codes easy to share verbally
@@ -182,18 +192,39 @@ function filterStateForPlayer(state, role) {
 
 // ---------------------------------------------------------------------------
 // Room state
-// rooms: Map<roomCode, { players: Map<socketId, { name, team, role }>, gameState }>
+// rooms: Map<roomCode, {
+//   players: Map<playerId, {
+//     name, team, role,
+//     socketId: string|null,           // current live socket; null while in grace
+//     disconnectTimer: NodeJS.Timeout|null,
+//   }>,
+//   gameState, selectedCategories,
+// }>
+//
+// Players are keyed by a per-tab persistent playerId from the client so that
+// a page refresh (which yields a brand new socket.id) reattaches to the same
+// team/role record instead of re-entering as an unassigned spectator.
 // ---------------------------------------------------------------------------
 
-/** @type {Map<string, { players: Map<string, { name: string, team: string|null, role: string|null }>, gameState: object|null, selectedCategories: string[] }>} */
+/** @type {Map<string, { players: Map<string, { name: string, team: string|null, role: string|null, socketId: string|null, disconnectTimer: any }>, gameState: object|null, selectedCategories: string[] }>} */
 const rooms = new Map();
+
+function clearDisconnectTimer(player) {
+  if (player && player.disconnectTimer) {
+    clearTimeout(player.disconnectTimer);
+    player.disconnectTimer = null;
+  }
+}
 
 function broadcastRoomState(io, roomCode) {
   const room = rooms.get(roomCode);
   if (!room) return;
-  const players = Array.from(room.players.entries()).map(([socketId, info]) => ({
-    socketId,
-    ...info,
+  const players = Array.from(room.players.entries()).map(([playerId, info]) => ({
+    playerId,
+    socketId: info.socketId || "",
+    name: info.name,
+    team: info.team,
+    role: info.role,
   }));
   io.to(roomCode).emit("room-updated", {
     players,
@@ -210,9 +241,12 @@ function broadcastGameState(io, roomCode) {
   const redRemaining = gs.board.filter((c) => c.type === "red" && !c.revealed).length;
   const blueRemaining = gs.board.filter((c) => c.type === "blue" && !c.revealed).length;
 
-  room.players.forEach((info, socketId) => {
+  room.players.forEach((info) => {
+    // Skip players whose socket is gone (in disconnect grace). They'll receive
+    // the latest state on reconnect via join-room.
+    if (!info.socketId) return;
     const filtered = filterStateForPlayer(gs, info.role);
-    io.to(socketId).emit("game-updated", { ...filtered, redRemaining, blueRemaining });
+    io.to(info.socketId).emit("game-updated", { ...filtered, redRemaining, blueRemaining });
   });
 }
 
@@ -243,6 +277,8 @@ app.prepare().then(() => {
   io.on("connection", (socket) => {
     /** @type {string | null} */
     let currentRoom = null;
+    /** @type {string | null} */
+    let playerId = null;
 
     // Sliding-window rate limit for this socket
     let eventCount = 0;
@@ -272,11 +308,17 @@ app.prepare().then(() => {
       });
     }
 
+    // Immediate eviction — used for explicit user actions (leave, switch room,
+    // create new room while in another). Disconnects use a separate grace path.
     function removeFromCurrentRoom() {
       if (!currentRoom) return;
       const room = rooms.get(currentRoom);
-      if (room) {
-        room.players.delete(socket.id);
+      if (room && playerId) {
+        const player = room.players.get(playerId);
+        if (player) {
+          clearDisconnectTimer(player);
+          room.players.delete(playerId);
+        }
         if (room.players.size === 0) {
           rooms.delete(currentRoom);
         } else {
@@ -292,14 +334,22 @@ app.prepare().then(() => {
     on("create-room", (payload, callback) => {
       const ack = toAck(callback);
       const playerName = sanitizeName(payload && payload.playerName);
+      const newPlayerId = payload && payload.playerId;
       if (!playerName) {
         ack({ error: "Invalid player name." });
+        return;
+      }
+      if (!isValidPlayerId(newPlayerId)) {
+        ack({ error: "Invalid player id." });
         return;
       }
       if (rooms.size >= MAX_ROOMS) {
         ack({ error: "Server is full. Try again later." });
         return;
       }
+      // Stash the playerId on this socket before clearing previous room — so
+      // removeFromCurrentRoom can find the matching record.
+      playerId = newPlayerId;
       removeFromCurrentRoom();
 
       // Codes are generated server-side so clients can't squat or forge them
@@ -309,7 +359,13 @@ app.prepare().then(() => {
       } while (rooms.has(roomCode));
 
       const players = new Map();
-      players.set(socket.id, { name: playerName, team: null, role: null });
+      players.set(playerId, {
+        name: playerName,
+        team: null,
+        role: null,
+        socketId: socket.id,
+        disconnectTimer: null,
+      });
       rooms.set(roomCode, { players, gameState: null, selectedCategories: [...DEFAULT_CATEGORY_IDS] });
       currentRoom = roomCode;
       socket.join(roomCode);
@@ -321,8 +377,13 @@ app.prepare().then(() => {
       const ack = toAck(callback);
       const playerName = sanitizeName(payload && payload.playerName);
       const roomCode = payload && payload.roomCode;
+      const incomingPlayerId = payload && payload.playerId;
       if (!playerName || !isValidRoomCode(roomCode)) {
         ack({ error: "Invalid name or room code." });
+        return;
+      }
+      if (!isValidPlayerId(incomingPlayerId)) {
+        ack({ error: "Invalid player id." });
         return;
       }
       const room = rooms.get(roomCode);
@@ -330,18 +391,32 @@ app.prepare().then(() => {
         ack({ error: "Room not found." });
         return;
       }
-      const existing = room.players.get(socket.id);
+      const existing = room.players.get(incomingPlayerId);
       if (!existing && room.players.size >= MAX_PLAYERS_PER_ROOM) {
         ack({ error: "Room is full." });
         return;
       }
-      if (currentRoom && currentRoom !== roomCode) removeFromCurrentRoom();
+      // Switching rooms in the same tab — evict from previous room first.
+      if (currentRoom && currentRoom !== roomCode) {
+        playerId = playerId || incomingPlayerId;
+        removeFromCurrentRoom();
+      }
+      playerId = incomingPlayerId;
 
-      room.players.set(socket.id, {
-        name: playerName,
-        team: existing ? existing.team : null,
-        role: existing ? existing.role : null,
-      });
+      if (existing) {
+        // Reconnect path: cancel pending eviction, take over the record.
+        clearDisconnectTimer(existing);
+        existing.name = playerName;
+        existing.socketId = socket.id;
+      } else {
+        room.players.set(playerId, {
+          name: playerName,
+          team: null,
+          role: null,
+          socketId: socket.id,
+          disconnectTimer: null,
+        });
+      }
       currentRoom = roomCode;
       socket.join(roomCode);
       ack({ success: true });
@@ -349,7 +424,7 @@ app.prepare().then(() => {
 
       // If a game is already running, send the current filtered state
       if (room.gameState) {
-        const info = room.players.get(socket.id);
+        const info = room.players.get(playerId);
         const gs = room.gameState;
         const redRemaining = gs.board.filter((c) => c.type === "red" && !c.revealed).length;
         const blueRemaining = gs.board.filter((c) => c.type === "blue" && !c.revealed).length;
@@ -370,11 +445,11 @@ app.prepare().then(() => {
       const team = payload && payload.team;
       const role = payload && payload.role;
       if (!VALID_TEAMS.includes(team) || !VALID_ROLES.includes(role)) return;
-      if (!currentRoom) return;
+      if (!currentRoom || !playerId) return;
       const room = rooms.get(currentRoom);
       // Disallow changing team/role once game has started
       if (!room || room.gameState) return;
-      const player = room.players.get(socket.id);
+      const player = room.players.get(playerId);
       if (!player) return;
       player.team = team;
       player.role = role;
@@ -387,11 +462,11 @@ app.prepare().then(() => {
       const ack = toAck(callback);
       const categoryIds = payload && payload.categoryIds;
       if (!Array.isArray(categoryIds)) return;
-      if (!currentRoom) return;
+      if (!currentRoom || !playerId) return;
       const room = rooms.get(currentRoom);
       // Disallow changing categories once the game has started
       if (!room || room.gameState) return;
-      if (!room.players.has(socket.id)) return;
+      if (!room.players.has(playerId)) return;
 
       const uniqueIds = [...new Set(categoryIds)].filter(
         (id) => typeof id === "string" && CATEGORY_IDS.includes(id)
@@ -451,10 +526,10 @@ app.prepare().then(() => {
       const count = payload && payload.count;
       // Strict integer check — NaN slips through Math.min/Math.max clamps
       if (!word || !Number.isInteger(count) || count < 0 || count > 9) return;
-      if (!currentRoom) return;
+      if (!currentRoom || !playerId) return;
       const room = rooms.get(currentRoom);
       if (!room || !room.gameState) return;
-      const player = room.players.get(socket.id);
+      const player = room.players.get(playerId);
       if (!player) return;
 
       const gs = room.gameState;
@@ -472,10 +547,10 @@ app.prepare().then(() => {
     on("guess-card", (payload) => {
       const cardIndex = payload && payload.cardIndex;
       if (!Number.isInteger(cardIndex) || cardIndex < 0 || cardIndex >= BOARD_SIZE) return;
-      if (!currentRoom) return;
+      if (!currentRoom || !playerId) return;
       const room = rooms.get(currentRoom);
       if (!room || !room.gameState) return;
-      const player = room.players.get(socket.id);
+      const player = room.players.get(playerId);
       if (!player) return;
 
       const gs = room.gameState;
@@ -491,10 +566,10 @@ app.prepare().then(() => {
     });
 
     on("randomize-teams", () => {
-      if (!currentRoom) return;
+      if (!currentRoom || !playerId) return;
       const room = rooms.get(currentRoom);
       if (!room || room.gameState) return;
-      if (!room.players.has(socket.id)) return;
+      if (!room.players.has(playerId)) return;
 
       const ids = shuffle(Array.from(room.players.keys()));
       const mid = Math.ceil(ids.length / 2);
@@ -514,18 +589,18 @@ app.prepare().then(() => {
     });
 
     on("reset-game", () => {
-      if (!currentRoom) return;
+      if (!currentRoom || !playerId) return;
       const room = rooms.get(currentRoom);
-      if (!room || !room.players.has(socket.id)) return;
+      if (!room || !room.players.has(playerId)) return;
       room.gameState = null;
       broadcastRoomState(io, currentRoom);
     });
 
     on("end-turn", () => {
-      if (!currentRoom) return;
+      if (!currentRoom || !playerId) return;
       const room = rooms.get(currentRoom);
       if (!room || !room.gameState) return;
-      const player = room.players.get(socket.id);
+      const player = room.players.get(playerId);
       if (!player) return;
 
       const gs = room.gameState;
@@ -536,9 +611,37 @@ app.prepare().then(() => {
     });
 
     // ---- Disconnect --------------------------------------------------------
-
+    //
+    // Don't evict immediately — a refresh disconnects and reconnects within
+    // a second or two, and we want the player to land back on their team
+    // instead of as an unassigned spectator. Hold their record for
+    // DISCONNECT_GRACE_MS; if no reconnect arrives, evict.
     socket.on("disconnect", () => {
-      removeFromCurrentRoom();
+      if (!currentRoom || !playerId) return;
+      const capturedRoom = currentRoom;
+      const capturedPlayerId = playerId;
+      const capturedSocketId = socket.id;
+      const room = rooms.get(capturedRoom);
+      if (!room) return;
+      const player = room.players.get(capturedPlayerId);
+      // If a fresh socket has already taken over this playerId, leave it alone.
+      if (!player || player.socketId !== capturedSocketId) return;
+
+      player.socketId = null;
+      clearDisconnectTimer(player);
+      player.disconnectTimer = setTimeout(() => {
+        const r = rooms.get(capturedRoom);
+        if (!r) return;
+        const p = r.players.get(capturedPlayerId);
+        // Reconnected during grace — nothing to do.
+        if (!p || p.socketId) return;
+        r.players.delete(capturedPlayerId);
+        if (r.players.size === 0) {
+          rooms.delete(capturedRoom);
+        } else {
+          broadcastRoomState(io, capturedRoom);
+        }
+      }, DISCONNECT_GRACE_MS);
     });
   });
 

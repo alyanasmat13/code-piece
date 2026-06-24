@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getSocket } from "@/lib/socket";
+import { getPlayerId, getSocket } from "@/lib/socket";
 import { DEFAULT_CATEGORY_IDS } from "@/lib/game/categories";
 import type { GameState, PlayerInfo, Role, Team } from "@/lib/game/types";
 
@@ -18,7 +18,7 @@ export function useGameSync(roomCode: string) {
   const [gameStarted, setGameStarted] = useState(false);
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [selectedCategories, setSelectedCategories] = useState<string[]>(DEFAULT_CATEGORY_IDS);
-  const [mySocketId, setMySocketId] = useState<string | null>(null);
+  const [myPlayerId, setMyPlayerId] = useState<string | null>(null);
   // Stable ref so reconnect handler can read the name without re-running the effect
   const nameRef = useRef("");
 
@@ -32,13 +32,13 @@ export function useGameSync(roomCode: string) {
     nameRef.current = name;
 
     const socket = getSocket();
-    setMySocketId(socket.id ?? null);
+    const playerId = getPlayerId();
+    setMyPlayerId(playerId);
 
     function doJoin() {
-      setMySocketId(socket.id ?? null);
       socket.emit(
         "join-room",
-        { playerName: nameRef.current, roomCode },
+        { playerName: nameRef.current, roomCode, playerId },
         (res: { error?: string }) => {
           if (res?.error) router.replace("/");
         }
@@ -123,14 +123,14 @@ export function useGameSync(roomCode: string) {
     []
   );
 
-  const myPlayer = players.find((p) => p.socketId === mySocketId) ?? null;
+  const myPlayer = players.find((p) => p.playerId === myPlayerId) ?? null;
 
   return {
     players,
     gameStarted,
     gameState,
     selectedCategories,
-    mySocketId,
+    myPlayerId,
     myPlayer,
     joinTeam,
     startGame,

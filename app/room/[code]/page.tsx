@@ -51,7 +51,7 @@ function TeamPanel({
             <AnimatePresence initial={false}>
               {players.map((p) => (
                 <motion.li
-                  key={p.socketId}
+                  key={p.playerId}
                   layout
                   initial={{ opacity: 0, x: -8, height: 0 }}
                   animate={{ opacity: 1, x: 0, height: "auto" }}

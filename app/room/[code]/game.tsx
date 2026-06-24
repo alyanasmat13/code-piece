@@ -43,6 +43,50 @@ function cardFaceStyles(card: Card, isSpymaster: boolean): { front: string; back
   return { front, back };
 }
 
+// Watermark behind the word on assassin cards — visually distinguishes them
+// from revealed-neutral cards (which are nearly the same shade of dark).
+function SkullAndCrossbones() {
+  return (
+    <svg
+      aria-hidden
+      viewBox="0 0 100 100"
+      className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-[78%] w-[78%]"
+    >
+      {/* Crossed bones */}
+      <g fill="white" fillOpacity="0.16">
+        <g transform="rotate(45 50 50)">
+          <rect x="12" y="46" width="76" height="7" rx="3.5" />
+          <circle cx="14" cy="46" r="4.5" />
+          <circle cx="14" cy="53" r="4.5" />
+          <circle cx="86" cy="46" r="4.5" />
+          <circle cx="86" cy="53" r="4.5" />
+        </g>
+        <g transform="rotate(-45 50 50)">
+          <rect x="12" y="46" width="76" height="7" rx="3.5" />
+          <circle cx="14" cy="46" r="4.5" />
+          <circle cx="14" cy="53" r="4.5" />
+          <circle cx="86" cy="46" r="4.5" />
+          <circle cx="86" cy="53" r="4.5" />
+        </g>
+      </g>
+      {/* Skull */}
+      <g fill="white" fillOpacity="0.22">
+        <ellipse cx="50" cy="42" rx="22" ry="20" />
+        <path d="M34,55 Q34,70 44,70 L56,70 Q66,70 66,55 Z" />
+      </g>
+      {/* Eyes, nose, teeth gaps — darker than the skull to read as cutouts */}
+      <g fill="black" fillOpacity="0.7">
+        <ellipse cx="41" cy="42" rx="5" ry="6.5" />
+        <ellipse cx="59" cy="42" rx="5" ry="6.5" />
+        <path d="M50,49 L46,57 L54,57 Z" />
+        <rect x="44" y="60" width="2" height="8" />
+        <rect x="49" y="60" width="2" height="8" />
+        <rect x="54" y="60" width="2" height="8" />
+      </g>
+    </svg>
+  );
+}
+
 interface GameCardProps {
   card: Card;
   clickable: boolean;
@@ -55,6 +99,10 @@ function GameCard({ card, clickable, isSpymaster, onClick }: GameCardProps) {
   const interact = clickable
     ? "cursor-pointer hover:brightness-110 active:scale-[0.97]"
     : "cursor-default";
+  const isAssassin = card.type === "assassin";
+  // Spymasters know the type up front; operatives only learn it after the flip.
+  const showSkullFront = isAssassin && isSpymaster;
+  const showSkullBack = isAssassin;
   return (
     <button
       type="button"
@@ -74,7 +122,8 @@ function GameCard({ card, clickable, isSpymaster, onClick }: GameCardProps) {
           className={`${FACE_BASE} ${front}`}
           style={{ backfaceVisibility: "hidden", WebkitBackfaceVisibility: "hidden" }}
         >
-          {card.word}
+          {showSkullFront && <SkullAndCrossbones />}
+          <span className="relative">{card.word}</span>
         </div>
         <div
           className={`${FACE_BASE} ${back}`}
@@ -84,7 +133,8 @@ function GameCard({ card, clickable, isSpymaster, onClick }: GameCardProps) {
             transform: "rotateY(180deg)",
           }}
         >
-          {card.word}
+          {showSkullBack && <SkullAndCrossbones />}
+          <span className="relative">{card.word}</span>
         </div>
       </motion.div>
     </button>
@@ -408,7 +458,7 @@ export function GameView({
       <div className="bg-slate-900/50 border-t border-slate-800 px-4 py-2 shrink-0">
         <div className="flex flex-wrap gap-x-4 gap-y-1 max-w-2xl mx-auto">
           {players.map((p) => (
-            <span key={p.socketId} className="text-xs text-slate-600 flex items-center gap-1">
+            <span key={p.playerId} className="text-xs text-slate-600 flex items-center gap-1">
               <span className={p.team === "red" ? "text-red-700" : p.team === "blue" ? "text-blue-700" : "text-slate-600"}>
                 {p.name}
               </span>

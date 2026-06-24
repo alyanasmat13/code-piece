@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import { getSocket } from "@/lib/socket";
+import { getPlayerId, getSocket } from "@/lib/socket";
 import { useSocket } from "@/components/providers/socket-provider";
 
 export default function Home() {
@@ -26,7 +26,7 @@ export default function Home() {
     // Room codes are generated server-side so they can't be forged or squatted
     getSocket().emit(
       "create-room",
-      { playerName: name.trim() },
+      { playerName: name.trim(), playerId: getPlayerId() },
       (res: { success?: boolean; error?: string; roomCode?: string }) => {
         setLoading(null);
         if (res.error || !res.roomCode) { setError(res.error ?? "Could not create room."); return; }
@@ -43,7 +43,7 @@ export default function Home() {
     setLoading("join");
     getSocket().emit(
       "join-room",
-      { playerName: name.trim(), roomCode: roomCode.trim().toUpperCase() },
+      { playerName: name.trim(), roomCode: roomCode.trim().toUpperCase(), playerId: getPlayerId() },
       (res: { success?: boolean; error?: string }) => {
         setLoading(null);
         if (res.error) { setError(res.error); return; }

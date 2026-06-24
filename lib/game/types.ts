@@ -29,6 +29,7 @@ export interface GameState {
 }
 
 export interface PlayerInfo {
+  playerId: string;
   socketId: string;
   name: string;
   team: Team | null;
