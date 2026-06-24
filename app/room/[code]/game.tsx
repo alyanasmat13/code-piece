@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import type { Card, GameState, PlayerInfo, Team } from "@/lib/game/types";
 
 // ---------------------------------------------------------------------------
@@ -30,19 +31,64 @@ const TYPE_STYLES: Record<string, { base: string; revealed: string }> = {
   },
 };
 
-function cardClasses(card: Card, clickable: boolean): string {
-  const styles = TYPE_STYLES[card.type] ?? TYPE_STYLES.hidden;
-  const color = card.revealed ? styles.revealed : styles.base;
+const FACE_BASE =
+  "absolute inset-0 flex items-center justify-center rounded-xl p-1 sm:p-2 overflow-hidden text-center text-[10px] sm:text-xs md:text-sm lg:text-base font-bold uppercase tracking-wide leading-tight break-words hyphens-auto select-none";
+
+function cardFaceStyles(card: Card, isSpymaster: boolean): { front: string; back: string } {
+  const actual = TYPE_STYLES[card.type] ?? TYPE_STYLES.hidden;
+  // Spymasters always see the actual color on the front; operatives see gray
+  // until the flip reveals it.
+  const front = isSpymaster ? actual.base : TYPE_STYLES.hidden.base;
+  const back = actual.revealed;
+  return { front, back };
+}
+
+interface GameCardProps {
+  card: Card;
+  clickable: boolean;
+  isSpymaster: boolean;
+  onClick: () => void;
+}
+
+function GameCard({ card, clickable, isSpymaster, onClick }: GameCardProps) {
+  const { front, back } = cardFaceStyles(card, isSpymaster);
   const interact = clickable
     ? "cursor-pointer hover:brightness-110 active:scale-[0.97]"
     : "cursor-default";
-  return [
-    "flex items-center justify-center rounded-xl p-2",
-    "text-center text-sm sm:text-base font-bold uppercase tracking-wide",
-    "transition-[background-color,color,opacity,transform,filter] duration-200 ease-out select-none h-24 sm:h-28 lg:h-32",
-    color,
-    interact,
-  ].join(" ");
+  return (
+    <button
+      type="button"
+      disabled={!clickable}
+      onClick={onClick}
+      className={`relative w-full h-full min-h-0 min-w-0 rounded-xl transition-[transform,filter] duration-150 ease-out ${interact}`}
+      style={{ perspective: "1200px" }}
+    >
+      <motion.div
+        initial={false}
+        animate={{ rotateY: card.revealed ? 180 : 0 }}
+        transition={{ type: "spring", stiffness: 200, damping: 24, mass: 0.8 }}
+        className="relative w-full h-full"
+        style={{ transformStyle: "preserve-3d" }}
+      >
+        <div
+          className={`${FACE_BASE} ${front}`}
+          style={{ backfaceVisibility: "hidden", WebkitBackfaceVisibility: "hidden" }}
+        >
+          {card.word}
+        </div>
+        <div
+          className={`${FACE_BASE} ${back}`}
+          style={{
+            backfaceVisibility: "hidden",
+            WebkitBackfaceVisibility: "hidden",
+            transform: "rotateY(180deg)",
+          }}
+        >
+          {card.word}
+        </div>
+      </motion.div>
+    </button>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -101,19 +147,36 @@ export function GameView({
   // Score pill styles — active team is highlighted
   function scorePill(team: Team, count: number) {
     const active = !winner && currentTurn === team;
-    if (team === "red") {
-      return (
-        <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors ${active ? "bg-red-900" : "bg-slate-800"}`}>
-          <span className={`text-xs font-semibold uppercase tracking-widest ${active ? "text-red-300" : "text-slate-500"}`}>Red</span>
-          <span className={`text-xl font-black tabular-nums ${active ? "text-red-200" : "text-slate-500"}`}>{count}</span>
-        </div>
-      );
-    }
+    const isRed = team === "red";
+    const bg = active ? (isRed ? "bg-red-900" : "bg-blue-900") : "bg-slate-800";
+    const labelColor = active ? (isRed ? "text-red-300" : "text-blue-300") : "text-slate-500";
+    const countColor = active ? (isRed ? "text-red-200" : "text-blue-200") : "text-slate-500";
     return (
-      <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors ${active ? "bg-blue-900" : "bg-slate-800"}`}>
-        <span className={`text-xs font-semibold uppercase tracking-widest ${active ? "text-blue-300" : "text-slate-500"}`}>Blue</span>
-        <span className={`text-xl font-black tabular-nums ${active ? "text-blue-200" : "text-slate-500"}`}>{count}</span>
-      </div>
+      <motion.div
+        layout
+        transition={{ type: "spring", stiffness: 320, damping: 30 }}
+        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors ${bg}`}
+      >
+        <span className={`text-xs font-semibold uppercase tracking-widest ${labelColor}`}>
+          {isRed ? "Red" : "Blue"}
+        </span>
+        <span className={`relative inline-block text-xl font-black tabular-nums leading-none ${countColor}`}>
+          {/* Invisible sizer so the pill width doesn't jump as digits animate */}
+          <span aria-hidden className="invisible">{count}</span>
+          <AnimatePresence mode="popLayout" initial={false}>
+            <motion.span
+              key={count}
+              initial={{ y: -10, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 10, opacity: 0 }}
+              transition={{ type: "spring", stiffness: 340, damping: 28 }}
+              className="absolute inset-0 flex items-center justify-center"
+            >
+              {count}
+            </motion.span>
+          </AnimatePresence>
+        </span>
+      </motion.div>
     );
   }
 
@@ -122,7 +185,7 @@ export function GameView({
   const turnLabel = turnIsRed ? "Red Team" : "Blue Team";
 
   return (
-    <div className="flex flex-col flex-1 bg-slate-950 text-white">
+    <div className="flex flex-col h-screen overflow-hidden bg-slate-950 text-white">
 
       {/* ── Top bar ── */}
       <header className="bg-slate-900 border-b border-slate-700 px-4 py-3 shrink-0">
@@ -176,72 +239,104 @@ export function GameView({
       )}
 
       {/* ── Win banner ── */}
-      {winner && (
-        <div
-          className={`mx-4 mt-4 rounded-2xl p-5 text-center shrink-0 animate-scale-in ${
-            winner === "red" ? "bg-red-950" : "bg-blue-950"
-          }`}
-        >
-          <p className={`text-3xl font-black ${winner === "red" ? "text-red-300" : "text-blue-300"}`}>
-            {winner === "red" ? "Red" : "Blue"} Team Wins!
-          </p>
-          <button
-            onClick={onReset}
-            className="mt-3 rounded-xl bg-amber-500 px-6 py-2.5 text-sm font-black text-slate-950 hover:bg-amber-400 active:scale-[0.97] transition-[background-color,transform] duration-150 ease-out"
+      <AnimatePresence>
+        {winner && (
+          <motion.div
+            key="win-banner"
+            initial={{ opacity: 0, scale: 0.92, y: -8 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: -8 }}
+            transition={{ type: "spring", stiffness: 280, damping: 24 }}
+            className={`mx-4 mt-4 rounded-2xl p-5 text-center shrink-0 ${
+              winner === "red" ? "bg-red-950" : "bg-blue-950"
+            }`}
           >
-            Play Again
-          </button>
-        </div>
-      )}
+            <p className={`text-3xl font-black ${winner === "red" ? "text-red-300" : "text-blue-300"}`}>
+              {winner === "red" ? "Red" : "Blue"} Team Wins!
+            </p>
+            <button
+              onClick={onReset}
+              className="mt-3 rounded-xl bg-amber-500 px-6 py-2.5 text-sm font-black text-slate-950 hover:bg-amber-400 active:scale-[0.97] transition-[background-color,transform] duration-150 ease-out"
+            >
+              Play Again
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ── Board ── */}
-      <main className="flex-1 flex items-center justify-center px-4 py-4">
-        <div className="w-full max-w-5xl">
-          <div className="grid grid-cols-5 gap-2 sm:gap-3">
+      <main className="flex-1 min-h-0 flex items-center justify-center px-3 py-3 sm:px-4 sm:py-4">
+        <div className="w-full max-w-5xl h-full">
+          <motion.div
+            className="grid grid-cols-5 grid-rows-5 gap-1.5 sm:gap-2 md:gap-3 h-full"
+            initial="hidden"
+            animate="visible"
+            variants={{
+              hidden: {},
+              visible: { transition: { staggerChildren: 0.025, delayChildren: 0.05 } },
+            }}
+          >
             {board.map((card, i) => {
               const clickable = canGuess && !card.revealed;
               return (
-                <button
+                <motion.div
                   key={i}
-                  disabled={!clickable}
-                  onClick={() => clickable && onGuessCard(i)}
-                  className={cardClasses(card, clickable)}
+                  className="w-full h-full min-h-0 min-w-0"
+                  variants={{
+                    hidden: { opacity: 0, scale: 0.85 },
+                    visible: {
+                      opacity: 1,
+                      scale: 1,
+                      transition: { type: "spring", stiffness: 260, damping: 22 },
+                    },
+                  }}
                 >
-                  {card.word}
-                </button>
+                  <GameCard
+                    card={card}
+                    clickable={clickable}
+                    isSpymaster={!!isSpymaster}
+                    onClick={() => clickable && onGuessCard(i)}
+                  />
+                </motion.div>
               );
             })}
-          </div>
+          </motion.div>
         </div>
       </main>
 
       {/* ── Bottom clue bar ── */}
       {!winner && (
-        <footer className={`shrink-0 border-t border-slate-800 ${turnIsRed ? "bg-red-950/30" : "bg-blue-950/30"}`}>
-          <div className="px-6 py-5">
+        <footer className={`shrink-0 border-t border-slate-800 transition-colors duration-300 ease-in-out-strong ${turnIsRed ? "bg-red-950/30" : "bg-blue-950/30"}`}>
+          <div className="px-4 py-3 sm:px-6 sm:py-4">
             {/* Spymaster clue input */}
             {canGiveClue && (
-              <form onSubmit={handleClueSubmit} className="flex gap-3 items-center animate-fade-up">
+              <motion.form
+                onSubmit={handleClueSubmit}
+                className="flex gap-3 items-center"
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ type: "spring", stiffness: 280, damping: 26 }}
+              >
                 <input
                   type="text"
                   placeholder="Your clue word…"
                   value={clueWord}
                   onChange={(e) => setClueWord(e.target.value)}
-                  className="flex-1 rounded-xl border border-slate-600 bg-slate-800 px-5 py-4 text-white placeholder-slate-500 outline-none focus:border-slate-400 transition-colors text-lg"
+                  className="flex-1 rounded-xl border border-slate-600 bg-slate-800 px-4 py-3 text-white placeholder-slate-500 outline-none focus:border-slate-400 transition-colors text-base"
                   autoFocus
                 />
-                <div className="flex items-center gap-2 bg-slate-800 border border-slate-600 rounded-xl px-4 py-4">
+                <div className="flex items-center gap-2 bg-slate-800 border border-slate-600 rounded-xl px-3 py-3">
                   <button type="button" onClick={() => setClueCount(Math.max(0, clueCount - 1))} className="text-slate-400 hover:text-white active:scale-[0.9] transition-[color,transform] duration-100 ease-out w-6 text-center text-lg font-bold">−</button>
                   <span className="text-white font-black text-xl w-6 text-center tabular-nums">{clueCount}</span>
                   <button type="button" onClick={() => setClueCount(Math.min(9, clueCount + 1))} className="text-slate-400 hover:text-white active:scale-[0.9] transition-[color,transform] duration-100 ease-out w-6 text-center text-lg font-bold">+</button>
                 </div>
                 <button
                   type="submit"
-                  className="rounded-xl bg-amber-500 px-7 py-4 text-base font-black text-slate-950 hover:bg-amber-400 active:scale-[0.97] transition-[background-color,transform] duration-150 ease-out"
+                  className="rounded-xl bg-amber-500 px-5 py-3 text-sm font-black text-slate-950 hover:bg-amber-400 active:scale-[0.97] transition-[background-color,transform] duration-150 ease-out"
                 >
                   Give Clue
                 </button>
-              </form>
+              </motion.form>
             )}
 
             {/* Waiting for spymaster */}
@@ -252,38 +347,59 @@ export function GameView({
             )}
 
             {/* Active clue display */}
-            {phase === "guess" && currentClue && (
-              <div key={`${currentClue.word}-${currentClue.count}`} className="flex items-center gap-6 animate-fade-up">
-                <div className="flex items-center gap-5 flex-1 flex-wrap">
-                  <div>
-                    <p className="text-xs text-slate-500 uppercase tracking-widest font-semibold mb-1">Clue</p>
-                    <p className="text-4xl font-black text-white leading-none">
-                      &ldquo;{currentClue.word}&rdquo;
-                    </p>
+            <AnimatePresence mode="wait">
+              {phase === "guess" && currentClue && (
+                <motion.div
+                  key={`${currentClue.word}-${currentClue.count}`}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  transition={{ type: "spring", stiffness: 280, damping: 26 }}
+                  className="flex items-center gap-4"
+                >
+                  <div className="flex items-center gap-4 flex-1 flex-wrap">
+                    <div>
+                      <p className="text-[10px] text-slate-500 uppercase tracking-widest font-semibold mb-0.5">Clue</p>
+                      <p className="text-2xl sm:text-3xl font-black text-white leading-none">
+                        &ldquo;{currentClue.word}&rdquo;
+                      </p>
+                    </div>
+                    <div className="border-l border-slate-700 pl-4">
+                      <p className="text-[10px] text-slate-500 uppercase tracking-widest font-semibold mb-0.5">Count</p>
+                      <p className={`text-2xl sm:text-3xl font-black leading-none ${turnText}`}>
+                        {currentClue.count}
+                      </p>
+                    </div>
+                    <div className="border-l border-slate-700 pl-4">
+                      <p className="text-[10px] text-slate-500 uppercase tracking-widest font-semibold mb-0.5">Guesses Left</p>
+                      <span className="relative inline-block text-2xl sm:text-3xl font-black text-slate-200 leading-none tabular-nums">
+                        <span aria-hidden className="invisible">{guessesLeft}</span>
+                        <AnimatePresence mode="popLayout" initial={false}>
+                          <motion.span
+                            key={guessesLeft}
+                            initial={{ y: -10, opacity: 0 }}
+                            animate={{ y: 0, opacity: 1 }}
+                            exit={{ y: 10, opacity: 0 }}
+                            transition={{ type: "spring", stiffness: 340, damping: 28 }}
+                            className="absolute inset-0 flex items-center justify-center"
+                          >
+                            {guessesLeft}
+                          </motion.span>
+                        </AnimatePresence>
+                      </span>
+                    </div>
                   </div>
-                  <div className="border-l border-slate-700 pl-5">
-                    <p className="text-xs text-slate-500 uppercase tracking-widest font-semibold mb-1">Count</p>
-                    <p className={`text-4xl font-black leading-none ${turnText}`}>
-                      {currentClue.count}
-                    </p>
-                  </div>
-                  <div className="border-l border-slate-700 pl-5">
-                    <p className="text-xs text-slate-500 uppercase tracking-widest font-semibold mb-1">Guesses Left</p>
-                    <p className="text-4xl font-black text-slate-200 leading-none">
-                      {guessesLeft}
-                    </p>
-                  </div>
-                </div>
-                {canEndTurn && (
-                  <button
-                    onClick={onPassTurn}
-                    className="shrink-0 rounded-xl border border-slate-600 bg-slate-800 px-5 py-3 text-sm font-semibold text-slate-300 hover:bg-slate-700 active:scale-[0.97] transition-[background-color,transform] duration-150 ease-out"
-                  >
-                    End Turn
-                  </button>
-                )}
-              </div>
-            )}
+                  {canEndTurn && (
+                    <button
+                      onClick={onPassTurn}
+                      className="shrink-0 rounded-xl border border-slate-600 bg-slate-800 px-4 py-2.5 text-sm font-semibold text-slate-300 hover:bg-slate-700 active:scale-[0.97] transition-[background-color,transform] duration-150 ease-out"
+                    >
+                      End Turn
+                    </button>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         </footer>
       )}

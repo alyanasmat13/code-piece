@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { AnimatePresence, motion } from "framer-motion";
 import { getSocket } from "@/lib/socket";
 import { useSocket } from "@/components/providers/socket-provider";
 
@@ -66,17 +67,32 @@ export default function Home() {
 
           <div className="mt-8 max-w-md font-[family-name:var(--font-lora)]">
             <h2 className="text-xl font-black text-amber-400 tracking-tight mb-3">How to play</h2>
-            <ol className="space-y-3">
+            <motion.ol
+              className="space-y-3"
+              initial="hidden"
+              animate="visible"
+              variants={{
+                hidden: {},
+                visible: { transition: { staggerChildren: 0.08, delayChildren: 0.1 } },
+              }}
+            >
               {[
                 { title: "Pick a role", body: "Each team has a spymaster, who sees every card's color, and operatives, who don't." },
                 { title: "Give a clue", body: "On your turn, the spymaster gives one word and a number of related cards." },
                 { title: "Guess the cards", body: "Operatives discuss and tap cards. Right guesses keep your turn going — the assassin ends the game." },
                 { title: "Win", body: "First team to uncover all of their words wins." },
               ].map((step, i) => (
-                <li
+                <motion.li
                   key={step.title}
-                  className="flex gap-3 animate-fade-up"
-                  style={{ animationDelay: `${100 + i * 70}ms` }}
+                  className="flex gap-3"
+                  variants={{
+                    hidden: { opacity: 0, y: 10 },
+                    visible: {
+                      opacity: 1,
+                      y: 0,
+                      transition: { type: "spring", stiffness: 260, damping: 24 },
+                    },
+                  }}
                 >
                   <span className="shrink-0 mt-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-amber-500/15 text-amber-400 text-xs font-bold">
                     {i + 1}
@@ -84,9 +100,17 @@ export default function Home() {
                   <p className="text-slate-300 text-sm leading-relaxed">
                     <span className="text-slate-100 font-semibold">{step.title}.</span> {step.body}
                   </p>
-                </li>
+                </motion.li>
               ))}
-            </ol>
+            </motion.ol>
+            <motion.p
+              className="mt-5 text-xs italic text-amber-400/80"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.55, duration: 0.4 }}
+            >
+              WARNING - words and references contain One Piece manga spoilers.
+            </motion.p>
           </div>
         </div>
 
@@ -106,7 +130,12 @@ export default function Home() {
           <p className="mt-2 text-slate-400 text-sm">Built by Alyan Asmat</p>
         </div>
 
-        <div className="w-full max-w-sm animate-scale-in" style={{ animationDelay: "80ms" }}>
+        <motion.div
+          className="w-full max-w-sm"
+          initial={{ opacity: 0, scale: 0.96, y: 8 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          transition={{ type: "spring", stiffness: 240, damping: 22, delay: 0.1 }}
+        >
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-7 space-y-5">
             <div>
               <h2 className="text-white font-bold text-xl">Set Sail</h2>
@@ -143,11 +172,20 @@ export default function Home() {
               </div>
             </div>
 
-            {error && (
-              <div className="bg-red-950 border border-slate-700 text-red-300 text-sm rounded-xl px-4 py-2.5 animate-fade-up">
-                {error}
-              </div>
-            )}
+            <AnimatePresence initial={false}>
+              {error && (
+                <motion.div
+                  key="error"
+                  initial={{ opacity: 0, height: 0, y: -4 }}
+                  animate={{ opacity: 1, height: "auto", y: 0 }}
+                  exit={{ opacity: 0, height: 0, y: -4 }}
+                  transition={{ type: "spring", stiffness: 320, damping: 28 }}
+                  className="bg-red-950 border border-slate-700 text-red-300 text-sm rounded-xl px-4 py-2.5 overflow-hidden"
+                >
+                  {error}
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             <div className="flex gap-3 pt-1">
               <button
@@ -166,7 +204,7 @@ export default function Home() {
               </button>
             </div>
           </div>
-        </div>
+        </motion.div>
       </div>
     </div>
   );

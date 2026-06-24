@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { AnimatePresence, motion } from "framer-motion";
 import { getSocket } from "@/lib/socket";
 import { useGameSync } from "@/hooks/useGameSync";
 import { CATEGORIES, MIN_BOARD_WORDS, getWordPool } from "@/lib/game/categories";
@@ -47,28 +48,33 @@ function TeamPanel({
           <p className="text-slate-600 text-sm italic">No players yet — be the first!</p>
         ) : (
           <ul className="space-y-2.5">
-            {players.map((p, i) => (
-              <li
-                key={p.socketId}
-                className="flex items-center gap-3 animate-fade-up"
-                style={{ animationDelay: `${i * 40}ms` }}
-              >
-                <span className="relative flex h-2 w-2 shrink-0">
-                  <span className="absolute inline-flex h-full w-full rounded-full bg-green-400 animate-pulse-soft" />
-                  <span className="relative inline-flex h-2 w-2 rounded-full bg-green-400" />
-                </span>
-                <span className="text-slate-100 font-medium text-sm truncate">{p.name}</span>
-                <span
-                  className={`ml-auto shrink-0 text-xs font-bold px-2.5 py-0.5 rounded-full ${
-                    p.role === "spymaster"
+            <AnimatePresence initial={false}>
+              {players.map((p) => (
+                <motion.li
+                  key={p.socketId}
+                  layout
+                  initial={{ opacity: 0, x: -8, height: 0 }}
+                  animate={{ opacity: 1, x: 0, height: "auto" }}
+                  exit={{ opacity: 0, x: -8, height: 0 }}
+                  transition={{ type: "spring", stiffness: 320, damping: 28 }}
+                  className="flex items-center gap-3 overflow-hidden"
+                >
+                  <span className="relative flex h-2 w-2 shrink-0">
+                    <span className="absolute inline-flex h-full w-full rounded-full bg-green-400 animate-pulse-soft" />
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-green-400" />
+                  </span>
+                  <span className="text-slate-100 font-medium text-sm truncate">{p.name}</span>
+                  <span
+                    className={`ml-auto shrink-0 text-xs font-bold px-2.5 py-0.5 rounded-full ${p.role === "spymaster"
                       ? "bg-amber-900/60 text-amber-300"
                       : "bg-slate-700 text-slate-300"
-                  }`}
-                >
-                  {p.role === "spymaster" ? "Spymaster" : "Operative"}
-                </span>
-              </li>
-            ))}
+                      }`}
+                  >
+                    {p.role === "spymaster" ? "Spymaster" : "Operative"}
+                  </span>
+                </motion.li>
+              ))}
+            </AnimatePresence>
           </ul>
         )}
       </div>
@@ -77,17 +83,15 @@ function TeamPanel({
       <div className="bg-slate-800 border-t border-slate-700 p-3 flex gap-2">
         <button
           onClick={() => onJoin("spymaster")}
-          className={`flex-1 rounded-xl py-2.5 text-sm font-semibold border active:scale-[0.97] transition-[background-color,color,transform] duration-150 ease-out ${
-            myTeamRole === "spymaster" ? activeBtn : "border-slate-600 text-slate-400 hover:bg-slate-700 hover:text-slate-200"
-          }`}
+          className={`flex-1 rounded-xl py-2.5 text-sm cursor-pointer font-semibold border active:scale-[0.97] transition-[background-color,color,transform] duration-150 ease-out ${myTeamRole === "spymaster" ? activeBtn : "border-slate-600 text-slate-400 hover:bg-slate-700 hover:text-slate-200"
+            }`}
         >
           Spymaster
         </button>
         <button
           onClick={() => onJoin("operative")}
-          className={`flex-1 rounded-xl py-2.5 text-sm font-semibold border active:scale-[0.97] transition-[background-color,color,transform] duration-150 ease-out ${
-            myTeamRole === "operative" ? activeBtn : "border-slate-600 text-slate-400 hover:bg-slate-700 hover:text-slate-200"
-          }`}
+          className={`flex-1 rounded-xl cursor-pointer py-2.5 text-sm font-semibold border active:scale-[0.97] transition-[background-color,color,transform] duration-150 ease-out ${myTeamRole === "operative" ? activeBtn : "border-slate-600 text-slate-400 hover:bg-slate-700 hover:text-slate-200"
+            }`}
         >
           Operative
         </button>
@@ -111,7 +115,11 @@ function CategoryPicker({
   const enoughWords = totalWords >= MIN_BOARD_WORDS;
 
   return (
-    <div className="animate-fade-up">
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ type: "spring", stiffness: 260, damping: 26, delay: 0.1 }}
+    >
       <div className="flex items-center justify-between mb-3">
         <h3 className="font-black text-lg text-white">Word Categories</h3>
         <p className={`text-xs font-semibold transition-colors ${enoughWords ? "text-slate-500" : "text-amber-400"}`}>
@@ -122,29 +130,39 @@ function CategoryPicker({
         {CATEGORIES.map((cat) => {
           const isSelected = selected.includes(cat.id);
           return (
-            <button
+            <motion.button
               key={cat.id}
+              layout
               onClick={() => onToggle(cat.id)}
-              className={`rounded-xl border px-4 py-2.5 text-sm font-semibold active:scale-[0.97] transition-[background-color,color,border-color,transform] duration-150 ease-out ${
-                isSelected
-                  ? "bg-amber-500/15 border-amber-500/40 text-amber-300"
-                  : "border-slate-700 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
-              }`}
+              whileTap={{ scale: 0.96 }}
+              transition={{ type: "spring", stiffness: 360, damping: 26 }}
+              className={`rounded-xl cursor-pointer border px-4 py-2.5 text-sm  font-semibold transition-[background-color,color,border-color] duration-150 ease-out ${isSelected
+                ? "bg-amber-500/15 border-amber-500/40 text-amber-300 hover:bg-amber-500/20 hover:border-amber-500/50 hover:text-amber-400"
+                : "border-slate-700 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+                }`}
             >
               {cat.label}
               <span className={isSelected ? "ml-2 text-xs text-amber-400/70" : "ml-2 text-xs text-slate-600"}>
                 {cat.words.length}
               </span>
-            </button>
+            </motion.button>
           );
         })}
       </div>
-      {!enoughWords && (
-        <p className="mt-3 text-xs text-amber-400 animate-fade-up">
-          Select at least {MIN_BOARD_WORDS} words total to start a game.
-        </p>
-      )}
-    </div>
+      <AnimatePresence>
+        {!enoughWords && (
+          <motion.p
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ type: "spring", stiffness: 320, damping: 28 }}
+            className="mt-3 text-xs text-amber-400 overflow-hidden"
+          >
+            Select at least {MIN_BOARD_WORDS} words total to start a game.
+          </motion.p>
+        )}
+      </AnimatePresence>
+    </motion.div>
   );
 }
 
@@ -179,8 +197,8 @@ export default function RoomPage() {
   const startLabel = !hasSpymasters
     ? "Each team needs a Spymaster"
     : !enoughWords
-    ? "Select more word categories"
-    : "Start Game";
+      ? "Select more word categories"
+      : "Start Game";
 
   function handleToggleCategory(id: string) {
     const next = selectedCategories.includes(id)
@@ -220,7 +238,7 @@ export default function RoomPage() {
               {code}
             </h1>
           </div>
-          <p className="text-slate-400 text-sm hidden sm:block">Share this code to invite crewmates</p>
+          <p className="text-slate-400 text-sm hidden sm:block">Share this code to invite friends!</p>
           <button
             onClick={() => {
               getSocket().emit("leave-room", { roomCode: code });
@@ -237,47 +255,87 @@ export default function RoomPage() {
       <div className="flex-1 p-6">
         <div className="max-w-4xl mx-auto flex flex-col gap-5">
           {/* Team panels */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-fade-up">
-            <TeamPanel team="red" players={redPlayers} myPlayer={myPlayer} onJoin={(r) => joinTeam("red", r)} />
-            <TeamPanel team="blue" players={bluePlayers} myPlayer={myPlayer} onJoin={(r) => joinTeam("blue", r)} />
-          </div>
+          <motion.div
+            className="grid grid-cols-1 md:grid-cols-2 gap-4"
+            initial="hidden"
+            animate="visible"
+            variants={{
+              hidden: {},
+              visible: { transition: { staggerChildren: 0.08, delayChildren: 0.05 } },
+            }}
+          >
+            <motion.div
+              variants={{
+                hidden: { opacity: 0, y: 10 },
+                visible: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 260, damping: 24 } },
+              }}
+            >
+              <TeamPanel team="red" players={redPlayers} myPlayer={myPlayer} onJoin={(r) => joinTeam("red", r)} />
+            </motion.div>
+            <motion.div
+              variants={{
+                hidden: { opacity: 0, y: 10 },
+                visible: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 260, damping: 24 } },
+              }}
+            >
+              <TeamPanel team="blue" players={bluePlayers} myPlayer={myPlayer} onJoin={(r) => joinTeam("blue", r)} />
+            </motion.div>
+          </motion.div>
 
           {/* Unassigned players */}
-          {unassigned.length > 0 && (
-            <div className="bg-slate-900 border border-slate-700 rounded-xl px-5 py-3.5 animate-fade-up">
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-1">Not yet on a team</p>
-              <p className="text-slate-300 text-sm">{unassigned.map((p) => p.name).join(", ")}</p>
-            </div>
-          )}
+          <AnimatePresence>
+            {unassigned.length > 0 && (
+              <motion.div
+                key="unassigned"
+                layout
+                initial={{ opacity: 0, height: 0, y: -4 }}
+                animate={{ opacity: 1, height: "auto", y: 0 }}
+                exit={{ opacity: 0, height: 0, y: -4 }}
+                transition={{ type: "spring", stiffness: 300, damping: 26 }}
+                className="bg-slate-900 border border-slate-700 rounded-xl px-5 py-3.5 overflow-hidden"
+              >
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-1">Not yet on a team</p>
+                <p className="text-slate-300 text-sm">{unassigned.map((p) => p.name).join(", ")}</p>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Errors */}
-          {(startError || categoryError) && (
-            <div className="bg-red-950 border border-slate-700 text-red-300 text-sm rounded-xl px-4 py-2.5 animate-fade-up">
-              {startError || categoryError}
-            </div>
-          )}
+          <AnimatePresence>
+            {(startError || categoryError) && (
+              <motion.div
+                key="lobby-error"
+                layout
+                initial={{ opacity: 0, height: 0, y: -4 }}
+                animate={{ opacity: 1, height: "auto", y: 0 }}
+                exit={{ opacity: 0, height: 0, y: -4 }}
+                transition={{ type: "spring", stiffness: 300, damping: 26 }}
+                className="bg-red-950 border border-slate-700 text-red-300 text-sm rounded-xl px-4 py-2.5 overflow-hidden"
+              >
+                {startError || categoryError}
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Actions */}
           <div className="flex gap-3">
             <button
               disabled={players.length < 2}
               onClick={randomizeTeams}
-              className={`rounded-xl px-5 py-3.5 text-sm font-semibold border active:scale-[0.97] transition-[background-color,transform] duration-150 ease-out shrink-0 ${
-                players.length >= 2
-                  ? "border-slate-600 text-slate-300 bg-slate-800 hover:bg-slate-700"
-                  : "border-slate-800 text-slate-700 bg-slate-900 cursor-not-allowed active:scale-100"
-              }`}
+              className={`rounded-xl px-5 py-3.5 cursor-pointer text-sm font-semibold border active:scale-[0.97] transition-[background-color,transform] duration-150 ease-out shrink-0 ${players.length >= 2
+                ? "border-slate-600 text-slate-300 bg-slate-800 hover:bg-slate-700"
+                : "border-slate-800 text-slate-700 bg-slate-900 cursor-not-allowed active:scale-100"
+                }`}
             >
               Randomize Teams
             </button>
             <button
               disabled={!canStart}
               onClick={() => { setStartError(""); startGame((err) => setStartError(err)); }}
-              className={`flex-1 rounded-xl py-3.5 text-sm font-black tracking-wide active:scale-[0.98] transition-[background-color,transform] duration-150 ease-out ${
-                canStart
-                  ? "bg-amber-500 text-slate-950 hover:bg-amber-400"
-                  : "bg-slate-800 text-slate-600 cursor-not-allowed active:scale-100"
-              }`}
+              className={`flex-1 rounded-xl cursor-pointer py-3.5 text-sm font-black tracking-wide active:scale-[0.98] transition-[background-color,transform] duration-150 ease-out ${canStart
+                ? "bg-amber-500 text-slate-950 hover:bg-amber-400"
+                : "bg-slate-800 text-slate-600 cursor-not-allowed active:scale-100"
+                }`}
             >
               {startLabel}
             </button>
