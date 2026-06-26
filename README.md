@@ -1,36 +1,49 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Code Piece 🕵️‍♂️💬
 
-## Getting Started
+**Code Piece** is a modern, real-time multiplayer word association game inspired by the classic board game _Codenames_. Built with Next.js, React, and Socket.IO, players split into Red and Blue teams, competing to identify all of their secret agent cards on a shared board using single-word clues.
 
-First, run the development server:
+---
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## 🚀 Features
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+- **Real-Time Multiplayer:** Built on WebSockets (Socket.IO) for instantaneous synchronization of game state, room creation, joining, and player actions.
+- **Persistent Player Sessions:** Tab refresh or brief disconnect? A grace period window allows players to reconnect right back into their team and role.
+- **Dynamic Card Animations:** Smooth flipping transitions using `framer-motion` for cards when revealed.
+- **Customizable Word Categories:** Select from various themed word lists to keep game sessions fresh.
+- **Responsive Premium Design:** Sleek dark-mode aesthetic with tailwind styling, optimized for both desktop monitors and mobile devices.
+- **Safe Inputs:** Secure validation on room codes, player names, clue counts, and event rate limits.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+---
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 🎮 How to Play
 
-## Learn More
+The game requires **two teams** (Red and Blue). Each team must have:
 
-To learn more about Next.js, take a look at the following resources:
+1. **At least one Spymaster**
+2. **At least one Operative**
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### The Objective
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Find all of your team's cards on the board before the opposing team finds theirs. **Avoid the Assassin card at all costs!**
 
-## Deploy on Vercel
+### Step-by-Step Gameplay:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+1. **The Setup:** A grid of 25 cards is generated. Each card represents a hidden agent (Red or Blue), a neutral bystander (gray), or the Assassin (black).
+2. **The Roles:**
+   - **Spymasters:** Can see the true identities of all 25 cards. They take turns giving a **single-word clue** and a **number** (e.g., `"Water" 2`) representing how many cards on the board relate to that clue.
+   - **Operatives:** Can only see the words (the colors are hidden until guessed). Based on the Spymaster's clue, they discuss and click cards to reveal their colors.
+3. **Guessing rules:**
+   - Operatives can guess up to the given clue number **plus one** extra guess.
+   - If they guess a card of their team's color, they can continue guessing.
+   - If they guess a neutral card or an opponent's card, their turn ends immediately.
+   - If they guess the **Assassin** card, their team loses the game instantly.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+---
+
+## 🛠️ Tech Stack
+
+- **Frontend:** React 19, Next.js (App Router), Tailwind CSS, Framer Motion
+- **Backend:** Custom Node.js server (`server.js`), Socket.IO (WebSockets)
+- **Language:** TypeScript / JavaScript
+
+---
